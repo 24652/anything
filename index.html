@@ -1,141 +1,65 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# 1. 페이지 기본 설정 (가장 맨 위에 와야 합니다)
-st.set_page_config(
-    page_title="K-치킨 타이쿤", 
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
+# 1. 페이지 설정 (반드시 코드의 최상단에 위치해야 합니다)
+st.set_page_config(page_title="K-치킨 타이쿤", layout="centered")
 
-# 2. 게임 화면을 구성하는 HTML/CSS/JS 코드
-html_game_code = """
+# 2. 게임 본문 HTML
+game_html = """
 <!DOCTYPE html>
-<html lang="ko">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>K-치킨 프랜차이즈 타이쿤</title>
+    <title>Chicken Tycoon</title>
     <style>
-        body {
-            font-family: 'Malgun Gothic', sans-serif;
-            background-color: #f8f9fa;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin: 0;
-            padding: 10px;
-        }
-        .game-container {
-            background-color: white;
-            padding: 25px;
-            border-radius: 20px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-            text-align: center;
-            width: 350px;
-        }
-        h1 { color: #ff6b6b; margin-bottom: 5px; font-size: 28px; }
-        .status { font-size: 16px; margin: 12px 0; font-weight: bold; }
-        
-        .chicken-btn {
-            font-size: 70px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            transition: transform 0.1s;
-            outline: none;
-        }
-        .chicken-btn:active { transform: scale(0.9); }
-
-        .upgrade-section {
-            margin-top: 20px;
-            text-align: left;
-        }
-        .upgrade-btn {
-            width: 100%;
-            padding: 12px;
-            margin: 6px 0;
-            background-color: #4dabf7;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 14px;
-            cursor: pointer;
-            font-weight: bold;
-            display: flex;
-            justify-content: space-between;
-        }
-        .upgrade-btn:hover { background-color: #339af0; }
-        .upgrade-btn:disabled { background-color: #ced4da; cursor: not-allowed; }
-
-        .news-box {
-            background-color: #fff3bf;
-            border: 1px solid #fab005;
-            padding: 10px;
-            border-radius: 10px;
-            margin-top: 15px;
-            font-size: 13px;
-            min-height: 38px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: bold;
-        }
+        body { font-family: sans-serif; background-color: #f8f9fa; text-align: center; padding: 20px; margin: 0; }
+        .box { background: white; padding: 20px; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); display: inline-block; width: 320px; }
+        h1 { color: #ff6b6b; margin: 0 0 10px 0; font-size: 24px; }
+        .money-text { font-size: 18px; font-weight: bold; margin: 10px 0; }
+        .btn-click { font-size: 50px; background: none; border: none; cursor: pointer; transition: transform 0.1s; outline: none; }
+        .btn-click:active { transform: scale(0.9); }
+        .up-btn { width: 100%; padding: 10px; margin: 5px 0; background-color: #4dabf7; color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; }
+        .up-btn:disabled { background-color: #ced4da; cursor: not-allowed; }
     </style>
 </head>
 <body>
-
-<div class="game-container">
-    <h1>🍗 K-치킨 타이쿤</h1>
-    <p style="color: #868e96; margin-top: 0; font-size: 13px;">동네 상가에서 우주 정복까지!</p>
-    <hr style="border: 0; height: 1px; background: #eee;">
-    
-    <div class="status">현재 자산: <span id="money">0</span>원</div>
-    <div class="status" style="font-size: 13px; color: #495057;">
-        클릭 수익: +<span id="click-power">1,000</span>원 | 초당 자동수익: +<span id="auto-income">0</span>원
-    </div>
-
-    <button class="chicken-btn" id="chicken-click-btn" onclick="clickChicken()">🍗</button>
-    <p style="color: #adb5bd; font-size: 11px; margin-top: 5px;">치킨을 누르면 돈이 벌립니다!</p>
-
-    <div class="news-box" id="news-display">📢 소식: 치킨 마차를 오픈했습니다! 첫 손님이 올까요?</div>
-
-    <div class="upgrade-section">
-        <h3 style="font-size: 16px; margin-bottom: 10px;">🏪 프랜차이즈 업그레이드</h3>
-        <button class="upgrade-btn" id="btn-upgrade1" onclick="buyUpgrade(1)">
-            <span>👨‍🍳 알바생 고용 (초당 +500원)</span>
-            <span id="cost1">10,000원</span>
-        </button>
-        <button class="upgrade-btn" id="btn-upgrade2" onclick="buyUpgrade(2)">
-            <span>🌶️ 양념치킨 개발 (+2,000원/클릭)</span>
-            <span id="cost2">30,000원</span>
-        </button>
-        <button class="upgrade-btn" id="btn-upgrade3" onclick="buyUpgrade(3)">
-            <span>🚀 타임스퀘어 광고 (초당 +5,000원)</span>
-            <span id="cost3">150,000원</span>
-        </button>
-    </div>
-</div>
-
-<script>
-    let money = 0;
-    let clickPower = 1000;
-    let autoIncome = 0;
-
-    let cost1 = 10000;
-    let cost2 = 30000;
-    let cost3 = 150000;
-
-    const newsList = [
-        "🔥 유명 유튜버의 내돈내산 극찬 영상 떡상! 손님이 폭주합니다.",
-        "🌧️ 역대급 폭우로 인해 배달 주문이 2배로 증가했습니다!",
-        "🐔 신메뉴 '마라 민트초코 치킨' 출시... 호불호가 갈립니다.",
-        "📺 주말 예능 프로그램에 우리 치킨이 노출되었습니다!",
-        "💸 물가 상승으로 인해 닭고기 공급가가 변동됩니다."
-    ];
-
-    function updateDisplay() {
-        document.getElementById('money').innerText = money.toLocaleString();
-        document.getElementById('click-power').innerText = clickPower.toLocaleString();
-        document.getElementById('auto-income').innerText = autoIncome.toLocaleString();
+    <div class="box">
+        <h1>🍗 K-치킨 타이쿤</h1>
+        <div class="money-text">자산: <span id="m">0</span>원</div>
+        <div style="font-size:12px; color:#666; margin-bottom:10px;">초당 자동 수익: <span id="ai">0</span>원</div>
         
-        document.getElementById('cost1').innerText = cost1.toLocaleString() + "원";
+        <button class="btn-click" onclick="ck()">🍗</button>
+        <div style="font-size:11px; color:#aaa;">치킨을 눌러 돈을 버세요!</div>
+        
+        <div style="margin-top:20px; text-align:left;">
+            <b style="font-size:14px;">🏪 업그레이드</b>
+            <button class="up-btn" id="b1" onclick="buy(1)"><span>👨‍🍳 알바 고용 (+500원/초)</span><span id="c1">10,000원</span></button>
+            <button class="up-btn" id="b2" onclick="buy(2)"><span>🌶️ 양념 개발 (+2,000원/클릭)</span><span id="c2">30,000원</span></button>
+        </div>
+    </div>
+    <script>
+        let money = 0; let power = 1000; let auto = 0;
+        let cost1 = 10000; let cost2 = 30000;
+        function up() {
+            document.getElementById('m').innerText = money.toLocaleString();
+            document.getElementById('ai').innerText = auto.toLocaleString();
+            document.getElementById('c1').innerText = cost1.toLocaleString() + "원";
+            document.getElementById('c2').innerText = cost2.toLocaleString() + "원";
+            document.getElementById('b1').disabled = (money < cost1);
+            document.getElementById('b2').disabled = (money < cost2);
+        }
+        function ck() { money += power; up(); }
+        function buy(t) {
+            if(t===1 && money>=cost1) { money-=cost1; auto+=500; cost1=Math.floor(cost1*1.5); }
+            else if(t===2 && money>=cost2) { money-=cost2; power+=2000; cost2=Math.floor(cost2*1.7); }
+            up();
+        }
+        setInterval(function() { if(auto>0) { money+=auto; up(); } }, 1000);
+        up();
+    </script>
+</body>
+</html>
+"""
+
+# 3. Streamlit에 안전하게 로드
+components.html(game_html, height=500)
