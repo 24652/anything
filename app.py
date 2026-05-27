@@ -1,24 +1,20 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-# 1. 페이지 레이아웃 설정
 st.set_page_config(page_title="K-치킨 타이쿤 Master", layout="centered")
 
-# 2. 한 화면에 모든 요소가 들어오도록 크기를 줄인 HTML 구조
+# 코드가 잘리지 않도록 아주 짧은 단위로 안전하게 나누었습니다.
 html_lines = [
     "<!DOCTYPE html><html><head><meta charset='UTF-8'>",
     "<style>",
     "body { font-family: sans-serif; background-color: #1a1a24; text-align: center; padding: 5px; margin: 0; color: #ffffff; }",
-    # 외곽 상자 높이를 타이트하게 조정하고 여백(padding)을 줄였습니다.
     ".game-wrapper { background: #252632; padding: 12px; border-radius: 16px; border: 3px solid #3b3d54; display: inline-block; width: 330px; box-sizing: border-box; }",
     "h1 { color: #ffd43b; margin: 0; font-size: 20px; text-shadow: 2px 2px 0px #e67e22; }",
     ".sub-text { font-size: 10px; color: #a6a7b7; margin-bottom: 8px; }",
-    # 게임 화면 스크린 높이를 180px -> 140px로 대폭 줄여 아래쪽 공간을 확보했습니다.
     ".game-screen { background-color: #f1f3f5; border: 3px solid #1a1a24; border-radius: 10px; height: 140px; margin: 8px 0; position: relative; overflow: hidden; }",
     ".kitchen-zone { position: absolute; left: 0; top: 0; width: 80px; height: 100%; background-color: #dee2e6; border-right: 3px dashed #495057; }",
     ".kitchen-title { font-size: 10px; color: #495057; font-weight: bold; margin-top: 3px; background: #ced4da; padding: 1px 0; }",
     ".hall-zone { position: absolute; right: 0; top: 0; width: 240px; height: 100%; background-color: #e9ecef; }",
-    # 캐릭터와 의자 크기도 화면 비율에 맞게 살짝 축소
     ".sprite { position: absolute; font-size: 26px; transition: transform 0.08s ease; }",
     ".chef { left: 20px; top: 35px; }",
     ".helper { left: 20px; top: 85px; display: none; }",
@@ -27,15 +23,12 @@ html_lines = [
     ".seat2 { right: 30px; top: 20px; }",
     ".seat3 { right: 130px; top: 75px; }",
     ".seat4 { right: 30px; top: 75px; }",
-    # 금액창과 스펙창 간격 조절
     ".money-display { font-size: 22px; font-weight: bold; color: #51cf66; margin: 5px 0; text-shadow: 1px 1px 0px #2b8a3e; }",
     ".stats { font-size: 11px; color: #adc5dc; margin-bottom: 8px; background: #1c1c24; padding: 4px; border-radius: 6px; display: flex; justify-content: space-around; }",
-    # 버튼 높이 슬림화
     ".fry-btn { background-color: #f76707; color: white; border: none; padding: 10px; font-size: 15px; font-weight: bold; border-radius: 10px; cursor: pointer; border-bottom: 4px solid #d9480f; box-shadow: 0 3px #1a1a24; outline: none; width: 100%; box-sizing: border-box; }",
     ".fry-btn:active { border-bottom: 1px solid #d9480f; transform: translateY(3px); box-shadow: 0 1px #1a1a24; }",
     ".shop-section { margin-top: 12px; text-align: left; }",
     ".shop-title { font-size: 12px; color: #ffd43b; margin-bottom: 4px; font-weight: bold; }",
-    # 카드들의 두께를 대폭 줄여서 상점이 위로 올라오게 했습니다.
     ".upgrade-card { background: #1c1c24; padding: 6px 10px; margin: 4px 0; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #3b3d54; }",
     ".upgrade-info { width: 65%; }",
     ".upgrade-name { font-weight: bold; color: #ffffff; font-size: 11px; }",
@@ -52,17 +45,4 @@ html_lines = [
     "<div class='stats'><div>🖱️ 클릭: <span id='pow'>1,000</span></div><div>⏰ 초당: <span id='auto'>0</span></div></div>",
     "<button class='fry-btn' onclick='fry()'>🍗 치킨 튀겨서 서빙하기!</button>",
     "<div class='shop-section'><div class='shop-title'>🛒 업그레이드 상점</div>",
-    "<div class='upgrade-card'><div class='upgrade-info'><div class='upgrade-name'>🧑‍🍳 주방 알바 고용</div><div class='upgrade-desc'>자동 튀기기 (초당 +500)</div></div><button class='buy-btn' id='b1' onclick='buy(1)'><span id='c1'>10,000원</span></button></div>",
-    "<div class='upgrade-card'><div class='upgrade-info'><div class='upgrade-name'>🌶️ 특제 소스 개발</div><div class='upgrade-desc'>단가 상승 (+1,500/클릭)</div></div><button class='buy-btn' id='b2' onclick='buy(2)'><span id='c2'>30,000원</span></button></div></div></div>",
-    "<script>",
-    "let money = 0; let power = 1000; let autoIncome = 0; let cost1 = 10000; let cost2 = 30000; let hasHelper = false;",
-    "const guests = ['👨‍💼', '👩‍⚕️', '🐱', '🐶', '🦊', '👧'];",
-    "function update() {",
-    "document.getElementById('m').innerText = money.toLocaleString(); document.getElementById('pow').innerText = power.toLocaleString(); document.getElementById('auto').innerText = autoIncome.toLocaleString();",
-    "document.getElementById('c1').innerText = cost1.toLocaleString() + '원'; document.getElementById('c2').innerText = cost2.toLocaleString() + '원';",
-    "document.getElementById('b1').disabled = (money < cost1); document.getElementById('b2').disabled = (money < cost2);",
-    "if(hasHelper) { document.getElementById('helper-char').style.display = 'block'; }",
-    "}",
-    "function fry() { money += power; const chef = document.getElementById('chef-char'); chef.style.transform = 'scale(1.2) translateY(-5px)'; setTimeout(function() { chef.style.transform = 'scale(1) translateY(0)'; }, 80); createFloatingText(); update(); }",
-    "function createFloatingText() { const screen = document.getElementById('screen'); const text = document.createElement('div'); text.className = 'floating-text'; text.innerText = '+' + power.toLocaleString() + '원'; text.style.left = (15 + Math.random() * 15) + 'px'; text.style.top = (30 + Math.random() * 15) + 'px'; screen.appendChild(text); setTimeout(function() { text.remove(); }, 600); }",
-    "function buy(type) { if(type === 1 && money >= cost1) { money -= cost1; autoIncome += 500; cost1 = Math.floor(cost1 * 1.5); hasHelper = true; } else if(type === 2 && money >= cost2) { money -= cost2; power += 1500; cost2 = Math.floor(cost
+    "<div class='upgrade-card'><div class='upgrade-info'><div class='upgrade-name'>🧑‍🍳 주방 알바 고용</div><div class='upgrade-desc'>자동 튀기기 (초당 +500)</div></div><button class='buy-btn'
