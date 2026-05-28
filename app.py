@@ -1,309 +1,259 @@
 import streamlit as st
 import streamlit.components.v1 as components
+import random
 
-st.set_page_config(
-    page_title="K-치킨 레스토랑 타이쿤", 
-    layout="centered"
-)
+# Page configuration
+st.set_page_config(page_title="Streamlit Brick Breaker", layout="wide")
 
-# 잘림 방지를 위해 30~50자 단위로 극단적으로 조각내어 결합합니다.
-code = "<!DOCTYPE html><html><head><meta charset='UTF-8'>"
-code += "<style>"
-code += "body { font-family: sans-serif; "
-code += "background: #111219; color: #fff; "
-code += "text-align: center; margin: 0; "
-code += "padding: 5px; user-select: none; }"
-code += ".pad { background: #222533; padding: 12px; "
-code += "border-radius: 16px; border: 4px solid #f39c12; "
-code += "display: inline-block; width: 350px; "
-code += "box-sizing: border-box; }"
-code += "h1 { color: #f1c40f; margin: 0; "
-code += "font-size: 18px; "
-code += "text-shadow: 2px 2px 0px #d35400; }"
+# App title and instructions
+st.title("🧱 Streamlit 벽돌 깨기 게임")
+st.markdown("""
+왼쪽/오른쪽 화살표 키를 사용하여 패들을 움직이고 공을 튕겨 모든 벽돌을 깨뜨리세요.
+게임은 HTML5 Canvas와 JavaScript를 사용하여 구현되었으며 Streamlit에 내장되어 있습니다.
+""")
 
-# 📊 상태 표시창 대시보드
-code += ".status-panel { background: #151722; "
-code += "padding: 6px 10px; border-radius: 8px; "
-code += "font-size: 11px; font-weight: bold; "
-code += "color: #2ecc71; margin: 6px 0; "
-code += "display: flex; flex-direction: column; "
-code += "gap: 2px; text-align: left; }"
-code += ".hud-row { display: flex; "
-code += "justify-content: space-between; }"
+# Define the Brick Breaker game in HTML and JavaScript
+brick_breaker_html = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Brick Breaker</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #333;
+            color: white;
+            font-family: sans-serif;
+            height: 100vh;
+            overflow: hidden; /* Prevent scrolling */
+        }
+        #gameCanvas {
+            border: 4px solid #fff;
+            background-color: #000;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.5);
+        }
+        #gameUi {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameUi">
+        <div>Score: <span id="score">0</span></div>
+        <div>Lives: <span id="lives">3</span></div>
+        <div id="status">Press Left/Right Arrows</div>
+    </div>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
 
-# 🍳 튀김기 비주얼 레이아웃
-code += ".fryer-pot { background: #34495e; "
-code += "border: 4px solid #2c3e50; "
-code += "border-radius: 12px; height: 110px; "
-code += "position: relative; overflow: hidden; "
-code += "margin-bottom: 8px; "
-code += "box-shadow: inset 0 0 20px #000; }"
-code += ".oil-layer { position: absolute; bottom: 0; "
-code += "width: 100%; height: 75%; "
-code += "background: #f1c40f; opacity: 0.8; }"
-code += ".boil-active { "
-code += "animation: wave 0.1s infinite alternate; "
-code += "background: #e67e22 !important; }"
-code += "@keyframes wave { "
-code += "  0% { transform: translateY(0); }"
-code += "  100% { transform: translateY(2px); }"
-code += "}"
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const scoreSpan = document.getElementById("score");
+        const livesSpan = document.getElementById("lives");
+        const statusDiv = document.getElementById("status");
 
-# 🍗 치킨 그래픽 오브젝트 디자인
-code += ".chicken-obj { width: 55px; height: 55px; "
-code += "border-radius: 40% 60% 50% 40%; "
-code += "position: absolute; left: 140px; top: 35px; "
-code += "display: flex; align-items: center; "
-code += "justify-content: center; font-size: 10px; "
-code += "font-weight: bold; color: #fff; "
-code += "text-shadow: 1px 1px 1px #000; "
-code += "transition: all 0.2s; }"
-code += ".c-raw { background: #ffb3b3; "
-code += "border: 2px solid #ff4d4d; }"
-code += ".c-fry { background: #f39c12; "
-code += "border: 2px solid #d35400; "
-code += "animation: spin 0.5s infinite alternate; }"
-code += ".c-crispy { background: #964b00; "
-code += "border: 2px solid #592e00; }"
-code += ".c-sauce { background: #a80000; "
-code += "border: 2px solid #4a0000; }"
-code += ".c-burnt { background: #222; "
-code += "border: 2px solid #000; color: #777; }"
-code += "@keyframes spin { "
-code += "  0% { transform: rotate(0deg); }"
-code += "  100% { transform: rotate(3deg) scale(1.05); }"
-code += "}"
+        // Game constants and variables
+        const ballRadius = 10;
+        const paddleHeight = 15;
+        const paddleWidth = 100;
+        const brickRowCount = 5;
+        const brickColumnCount = 9;
+        const brickWidth = 75;
+        const brickHeight = 25;
+        const brickPadding = 10;
+        const brickOffsetTop = 50;
+        const brickOffsetLeft = 30;
 
-# 📊 조작 게이지바 컨트롤러
-code += ".gauge-box { background: #151722; "
-code += "padding: 6px; border-radius: 6px; "
-code += "margin-bottom: 6px; font-size: 10px; "
-code += "text-align: left; }"
-code += ".bar-bg { background: #333; height: 8px; "
-code += "border-radius: 4px; overflow: hidden; "
-code += "margin: 2px 0 4px 0; }"
-code += ".bar-fill { height: 100%; width: 0%; "
-code += "background: #2ecc71; }"
+        let x = canvas.width / 2;
+        let y = canvas.height - 30;
+        let dx = 4; // Horizontal ball speed
+        let dy = -4; // Vertical ball speed
+        let paddleX = (canvas.width - paddleWidth) / 2;
+        let rightPressed = false;
+        let leftPressed = false;
+        let score = 0;
+        let lives = 3;
+        let gameStarted = false;
+        let gameOver = false;
 
-# 🕹️ 버튼 인터페이스 세트
-code += ".btn-group { display: flex; gap: 4px; "
-code += "margin-bottom: 4px; }"
-code += ".ctrl-btn { flex: 1; background: #3498db; "
-code += "color: #fff; border: none; padding: 8px; "
-code += "font-weight: bold; font-size: 11px; "
-code += "border-radius: 6px; cursor: pointer; "
-code += "border-bottom: 3px solid #2980b9; }"
-code += ".ctrl-btn:active { transform: translateY(2px); "
-code += "border-bottom: 1px solid #2980b9; }"
-code += ".btn-fire { background: #e74c3c; "
-code += "border-bottom: 3px solid #c0392b; }"
-code += ".btn-serve { background: #2ecc71; "
-code += "border-bottom: 3px solid #27ae60; "
-code += "width: 100%; padding: 10px; "
-code += "font-size: 13px; margin-top: 2px; }"
-code += ".btn-serve:disabled { background: #555; "
-code += "border: none; cursor: not-allowed; transform:none; }"
+        // Initialize bricks
+        let bricks = [];
+        for (let c = 0; c < brickColumnCount; c++) {
+            bricks[c] = [];
+            for (let r = 0; r < brickRowCount; r++) {
+                bricks[c][r] = { x: 0, y: 0, status: 1, color: `hsl(${r * 40}, 70%, 60%)` };
+            }
+        }
 
-# 🛒 상점(Shop) 아이템 슬롯 인테리어
-code += ".shop-container { background: #151722; "
-code += "padding: 6px; border-radius: 8px; "
-code += "margin-top: 8px; text-align: left; }"
-code += ".shop-title { font-size: 11px; "
-code += "color: #f1c40f; font-weight: bold; "
-code += "margin-bottom: 4px; border-bottom: 1px solid #333; "
-code += "padding-bottom: 2px; }"
-code += ".shop-item { display: flex; "
-code += "justify-content: space-between; "
-code += "align-items: center; font-size: 10px; "
-code += "padding: 4px 0; border-bottom: 1px dashed #222; }"
-code += ".shop-btn { background: #e67e22; "
-code += "color: white; border: none; padding: 3px 6px; "
-code += "font-size: 9px; font-weight: bold; "
-code += "border-radius: 4px; cursor: pointer; }"
-code += ".shop-btn:disabled { background: #444; "
-code += "color: #777; cursor: not-allowed; }"
-code += "</style></head>"
+        // Event listeners for paddle control
+        document.addEventListener("keydown", keyDownHandler, false);
+        document.addEventListener("keyup", keyUpHandler, false);
 
-# 🏪 본문 레이아웃 배치
-code += "<body><div class='pad'>"
-code += "<h1>👨‍🍳 K-치킨 레스토랑 타이쿤</h1>"
+        function keyDownHandler(e) {
+            if (e.key == "Right" || e.key == "ArrowRight") {
+                rightPressed = true;
+                startGame();
+            } else if (e.key == "Left" || e.key == "ArrowLeft") {
+                leftPressed = true;
+                startGame();
+            }
+        }
 
-# 상단 멀티 대시보드 전광판
-code += "<div class='status-panel'>"
-code += "  <div class='hud-row'>"
-code += "    <div>💰 자금: <span id='m' style='color:#51cf66;'>0</span>원</div>"
-code += "    <div>⭐ 레벨: <span id='lvl' style='color:#f1c40f;'>1</span> (<span id='exp'>0</span>/100)</div>"
-code += "  </div>"
-code += "  <div class='hud-row' style='color:#a2b4c7; font-size:10px; margin-top:2px;'>"
-code += "    <div>📢 시스템: <span id='sys-msg'>닭을 기름에 넣으세요!</span></div>"
-code += "  </div>"
-code += "</div>"
+        function keyUpHandler(e) {
+            if (e.key == "Right" || e.key == "ArrowRight") {
+                rightPressed = false;
+            } else if (e.key == "Left" || e.key == "ArrowLeft") {
+                leftPressed = false;
+            }
+        }
 
-# 튀김기 탱크 존
-code += "<div class='fryer-pot'>"
-code += "<div class='oil-layer' id='oil'></div>"
-code += "<div class='chicken-obj c-raw' id='chicken'>생닭원육</div>"
-code += "</div>"
+        function startGame() {
+            if (!gameStarted && !gameOver) {
+                gameStarted = true;
+                statusDiv.innerText = "Game On!";
+            }
+        }
 
-# 게이지 패널
-code += "<div class='gauge-box'>"
-code += "<span>🌡️ 기름 온도 (<span id='txt-temp'>140</span>°C) / 목표: 170~190°C</span>"
-code += "<div class='bar-bg'><div class='bar-fill' id='b-temp' style='width:40%;'></div></div>"
-code += "<span>🍗 조리 진척도</span>"
-code += "<div class='bar-bg'><div class='bar-fill' id='b-cook' style='width:0%; background:#f1c40f;'></div></div>"
-code += "</div>"
+        // Collision detection for ball and bricks
+        function collisionDetection() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    let b = bricks[c][r];
+                    if (b.status == 1) {
+                        if (x > b.x && x < b.x + brickWidth && y > b.y && y < b.y + brickHeight) {
+                            dy = -dy;
+                            b.status = 0;
+                            score++;
+                            scoreSpan.innerText = score;
+                            if (score == brickRowCount * brickColumnCount) {
+                                gameOver = true;
+                                statusDiv.innerText = "YOU WIN! Refresh to play again.";
+                                // Option: Reset and increase speed for next level
+                            }
+                        }
+                    }
+                }
+            }
+        }
 
-# 액션 조작기 버튼
-code += "<div class='btn-group'>"
-code += "<button class='ctrl-btn btn-fire' onmousedown='heat(true)' onmouseup='heat(false)' onmouseleave='heat(false)'>🔥 온도가동 (꾹 누르기)</button>"
-code += "<button class='ctrl-btn' onclick='flip()'>🔄 치킨 뒤집기</button>"
-code += "</div>"
-code += "<div class='btn-group'>"
-code += "<button class='ctrl-btn' style='background:#9b59b6; border-bottom:3px solid #8e44ad;' id='btn-sauce' onclick='applySauce()' disabled>🥫 양념 버무리기</button>"
-code += "</div>"
-code += "<button class='ctrl-btn btn-serve' id='serve' onclick='serve()' disabled>🛎️ 요리 손님상에 출하하기</button>"
+        // Draw game elements
+        function drawBall() {
+            ctx.beginPath();
+            ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "#fff";
+            ctx.fill();
+            ctx.closePath();
+        }
 
-# 🛒 콘텐츠 대확장! 업그레이드 및 해금 상점
-code += "<div class='shop-container'>"
-code += "  <div class='shop-title'>🛒 자금 투자 및 기술 해금 상점</div>"
-# 아이템 1: 양념치킨 해금
-code += "  <div class='shop-item'>"
-code += "    <span>🥫 <b>K-매콤양념 레시피 해금</b> (판매가 +2,000원)</span>"
-code += "    <button class='shop-btn' id='s-item1' onclick='buyShop(1)'>2,500원</button>"
-code += "  </div>"
-# 아이템 2: 자동 뒤집기 알바 고용
-code += "  <div class='shop-item'>"
-code += "    <span>🤖 <b>자동 뒤집기 알바 고용</b> (품질 무조건 보장)</span>"
-code += "    <button class='shop-btn' id='s-item2' onclick='buyShop(2)'>5,000원</button>"
-code += "  </div>"
-# 아이템 3: 고성능 열선 교체
-code += "  <div class='shop-item'>"
-code += "    <span>⚡ <b>초고속 히터 코일 교체</b> (기본 가열 속도 x2)</span>"
-code += "    <button class='shop-btn' id='s-item3' onclick='buyShop(3)'>4,000원</button>"
-code += "  </div>"
-code += "</div>"
+        function drawPaddle() {
+            ctx.beginPath();
+            ctx.rect(paddleX, canvas.height - paddleHeight - 10, paddleWidth, paddleHeight);
+            ctx.fillStyle = "#0095DD";
+            ctx.fill();
+            ctx.closePath();
+        }
 
-code += "</div>"
+        function drawBricks() {
+            for (let c = 0; c < brickColumnCount; c++) {
+                for (let r = 0; r < brickRowCount; r++) {
+                    if (bricks[c][r].status == 1) {
+                        let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
+                        let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
+                        bricks[c][r].x = brickX;
+                        bricks[c][r].y = brickY;
+                        ctx.beginPath();
+                        ctx.rect(brickX, brickY, brickWidth, brickHeight);
+                        ctx.fillStyle = bricks[c][r].color;
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
 
-# 🕹️ 확장형 타이쿤 게임 메커니즘 엔진 자바스크립트
-code += "<script>"
-code += "let money = 0; let lv = 1; let exp = 0;"
-code += "let temp = 140; let cook = 0; let isHeating = false;"
-code += "let chickenState = 'raw'; let flipCount = 0;"
-code += "let heatPower = 4.5;"
+        // Main game loop
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawBricks();
+            drawBall();
+            drawPaddle();
+            collisionDetection();
 
-# 상점 상품 보유 현황 플래그
-code += "let hasSauceRecipe = false;"
-code += "let hasAutoFlipper = false;"
-code += "let hasFastHeater = false;"
+            // Ball wall collisions
+            if (x + dx > canvas.width - ballRadius || x + dx < ballRadius) {
+                dx = -dx;
+            }
+            if (y + dy < ballRadius) {
+                dy = -dy;
+            } else if (y + dy > canvas.width) { // For debugging to see if ball goes past canvas
+               // dy = -dy;
+            }
 
-code += "function sys(t) { document.getElementById('sys-msg').innerText = t; }"
-code += "function heat(val) { isHeating = val; }"
+            // Game movement (if started)
+            if (gameStarted && !gameOver) {
+                // Ball and paddle collision
+                if (y + dy > canvas.height - paddleHeight - 10 - ballRadius) {
+                  if (x > paddleX && x < paddleX + paddleWidth) {
+                      dy = -dy;
+                      // dy = -4 - (score * 0.1); // Option to increase speed with score
+                  } else if (y + dy > canvas.height - ballRadius){
+                    lives--;
+                    livesSpan.innerText = lives;
+                    if (!lives) {
+                        gameOver = true;
+                        statusDiv.innerText = "GAME OVER. Refresh to play again.";
+                    } else {
+                        // Reset ball and paddle, but keep bricks
+                        x = canvas.width / 2;
+                        y = canvas.height - 30;
+                        dx = 4;
+                        dy = -4;
+                        paddleX = (canvas.width - paddleWidth) / 2;
+                        gameStarted = false;
+                        statusDiv.innerText = "Press Arrows to restart ball.";
+                    }
+                  }
+                }
 
-code += "function updateUI() {"
-code += "  document.getElementById('m').innerText = money.toLocaleString();"
-code += "  document.getElementById('lvl').innerText = lv;"
-code += "  document.getElementById('exp').innerText = exp;"
-code += "  document.getElementById('serve').disabled = (chickenState !== 'cooked' && chickenState !== 'sauce' && chickenState !== 'burnt');"
-code += "  document.getElementById('btn-sauce').disabled = (chickenState !== 'cooked' || !hasSauceRecipe);"
-code += "  document.getElementById('s-item1').disabled = (hasSauceRecipe || money < 2500);"
-code += "  document.getElementById('s-item2').disabled = (hasAutoFlipper || money < 5000);"
-code += "  document.getElementById('s-item3').disabled = (hasFastHeater || money < 4000);"
-code += "}"
+                x += dx;
+                y += dy;
+            }
 
-# 메인 프레임 루프 정밀 계산기 (0.1초 사이클)
-code += "setInterval(function() {"
-code += "  let upSpeed = hasFastHeater ? heatPower * 2 : heatPower;"
-code += "  if (isHeating) { temp += upSpeed; } else { temp -= 1.8; }"
-code += "  if (temp < 100) temp = 100; if (temp > 260) temp = 260;"
-code += "  let tPct = ((temp - 100) / 160) * 100;"
-code += "  let barT = document.getElementById('b-temp');"
-code += "  barT.style.width = tPct + '%';"
-code += "  document.getElementById('txt-temp').innerText = Math.floor(temp);"
-code += "  if (temp >= 170 && temp <= 190) { barT.style.background = '#2ecc71'; } "
-code += "  else if (temp > 190) { barT.style.background = '#e74c3c'; } "
-code += "  else { barT.style.background = '#3498db'; }"
-code += "  let oil = document.getElementById('oil');"
-code += "  if (temp > 160) { oil.className = 'oil-layer boil-active'; } else { oil.className = 'oil-layer'; }"
+            // Paddle movement
+            if (rightPressed && paddleX < canvas.width - paddleWidth) {
+                paddleX += 7;
+            } else if (leftPressed && paddleX > 0) {
+                paddleX -= 7;
+            }
 
-# 알바생 자동 조작 처리
-code += "  if (hasAutoFlipper && chickenState === 'frying' && Math.random() > 0.93) { flip(); }"
+            requestAnimationFrame(draw); // Call the next frame
+        }
 
-# 치킨 조리 진행 상태 머신 연산
-code += "  if (chickenState === 'frying') {"
-code += "    if (temp >= 170 && temp <= 190) { cook += 2.0; } "
-code += "    else if (temp > 190) { cook += 4.0; } "
-code += "    else if (temp >= 140) { cook += 0.6; }"
-code += "    if (cook > 100) cook = 100;"
-code += "    document.getElementById('b-cook').style.width = cook + '%';"
-code += "    let c = document.getElementById('chicken');"
-code += "    if (cook >= 40 && cook < 85) { c.innerText = '익어가는중'; }"
-code += "    if (cook >= 85) {"
-code += "      chickenState = 'cooked'; c.className = 'chicken-obj c-crispy';"
-code += "      c.innerText = '후라이드'; sys('황금 치킨 완성! 양념을 바르거나 바로 출하하세요.');"
-code += "      updateUI();"
-code += "    }"
-code += "  } else if (chickenState === 'cooked' || chickenState === 'sauce') {"
-code += "    if (temp > 170) cook += 1.5;"
-code += "    if (cook >= 130) {"
-code += "      chickenState = 'burnt'; let c = document.getElementById('chicken');"
-code += "      c.className = 'chicken-obj c-burnt'; c.innerText = '숯둥이'; sys('너무 오래 튀겨 치킨이 타버렸습니다!');"
-code += "      updateUI();"
-code += "    }"
-code += "  }"
-code += "}, 100);"
+        draw(); // Start the game loop
+    </script>
+</body>
+</html>
+"""
 
-# 버튼 기능 및 비즈니스 연산 함수
-code += "function flip() {"
-code += "  if (chickenState === 'raw') {"
-code += "    chickenState = 'frying'; let c = document.getElementById('chicken');"
-code += "    c.className = 'chicken-obj c-fry'; c.innerText = '지글지글'; sys('기름에 투하 완료! 온도를 유지하세요.');"
-code += "  } else if (chickenState === 'frying' || chickenState === 'cooked') {"
-code += "    flipCount++; let c = document.getElementById('chicken');"
-code += "    c.style.transform = 'scaleY(-1)'; "
-code += "    setTimeout(function(){ c.style.transform = 'scaleY(1)'; }, 150);"
-code += "  }"
-code += "}"
+# Embed the game using components.html
+# Need a generous height to ensure the canvas and UI fit without internal scrollbars.
+components.html(brick_breaker_html, height=700, scrolling=False)
 
-code += "function applySauce() {"
-code += "  if (chickenState === 'cooked' && hasSauceRecipe) {"
-code += "    chickenState = 'sauce'; let c = document.getElementById('chicken');"
-code += "    c.className = 'chicken-obj c-sauce'; c.innerText = '양념치킨'; sys('달콤매콤 양념을 듬뿍 버무렸습니다!');"
-code += "    updateUI();"
-code += "  }"
-code += "}"
-
-code += "function serve() {"
-code += "  let reward = 0; let gainedExp = 0;"
-code += "  if (chickenState === 'cooked') {"
-code += "    reward = 3000 + (lv * 300);"
-code += "    if (flipCount >= 2 && flipCount <= 5) { reward += 1000; sys('명품 후라이드 판매! 보너스 획득!'); } else { sys('후라이드 판매 완료!'); }"
-code += "    gainedExp = 35;"
-code += "  } else if (chickenState === 'sauce') {"
-code += "    reward = 5000 + (lv * 500);"
-code += "    if (flipCount >= 2 && flipCount <= 5) { reward += 1500; sys('최고급 양념치킨 대성공!'); } else { sys('양념치킨 판매 완료!'); }"
-code += "    gainedExp = 50;"
-code += "  } else if (chickenState === 'burnt') {"
-code += "    reward = -1000; sys('탄 치킨 폐기 비용이 발생했습니다.');"
-code += "  }"
-code += "  money += reward; exp += gainedExp;"
-code += "  if (exp >= 100) { lv += 1; exp = exp - 100; sys('🎉 레벨업 달성! 손님들이 주는 팁 단가가 상승합니다!'); }"
-code += "  chickenState = 'raw'; cook = 0; flipCount = 0;"
-code += "  let c = document.getElementById('chicken');"
-code += "  c.className = 'chicken-obj c-raw'; c.innerText = '생닭원육';"
-code += "  document.getElementById('b-cook').style.width = '0%';"
-code += "  updateUI();"
-code += "}"
-
-# 상점 구매 연산 루틴
-code += "function buyShop(item) {"
-code += "  if (item === 1 && money >= 2500) { money -= 2500; hasSauceRecipe = true; sys('레시피 해금! 이제 후라이드를 튀긴 후 양념 버튼을 누를 수 있습니다.'); }"
-code += "  if (item === 2 && money >= 5000) { money -= 5000; hasAutoFlipper = true; sys('알바 고용 완료! 이제 알아서 타이밍 맞춰 뒤집어줍니다.'); }"
-code += "  if (item === 3 && money >= 4000) { money -= 4000; hasFastHeater = true; sys('초고속 코일 장착 완료! 온도 제어가 훨씬 빨라집니다.'); }"
-code += "  updateUI();"
-code += "}"
-
-code += "updateUI();"
-code += "</script></body></html>"
-
-components.html(code, height=560)
+# Optional: Add GitHub instructions or link
+with st.expander("GitHub에 업로드하고 배포하는 방법"):
+    st.markdown("""
+    1. 이 코드를 `app.py`라는 파일로 저장하세요.
+    2. 같은 폴더에 다음 내용을 포함하는 `requirements.txt` 파일을 만드세요:
+       ```text
+       streamlit
+       ```
+    3. 이 두 파일을 GitHub 저장소에 업로드하세요.
+    4. [Streamlit Community Cloud](https://streamlit.io/cloud)에 가입하고 GitHub 저장소를 연결하여 배포하세요.
+    """)
