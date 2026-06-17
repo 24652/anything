@@ -135,4 +135,319 @@ premium_baseball_html = """
                 <button class="action-btn" onclick="actionBtnClick()">⚾ 투구 (Space)</button>
             </div>
             <div id="batControls" style="display:none; gap:20px; align-items:center;">
-                <div style="font-size:15px; font-weight:900; color:#cbd5e1; letter-spacing:1px;">공이 들어오는 타이밍에 맞춰 타격
+                <div style="font-size:15px; font-weight:900; color:#cbd5e1; letter-spacing:1px;">공이 들어오는 타이밍에 맞춰 타격하세요!</div>
+                <button class="action-btn btn-hit" onclick="actionBtnClick()">💥 스윙 (Space)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        const msgDiv = document.getElementById("msgOverlay");
+
+        const kboDB = {
+            "한화": [{n:"류현진", b:["포심", "체인지업", "커브"], s:148}, {n:"문동주", b:["포심", "슬라이더"], s:160}],
+            "SSG": [{n:"김광현", b:["포심", "슬라이더"], s:152}, {n:"문승원", b:["포심", "커브"], s:150}],
+            "KIA": [{n:"양현종", b:["포심", "체인지업"], s:150}, {n:"정해영", b:["포심", "슬라이더"], s:153}],
+            "LG": [{n:"임찬규", b:["포심", "체인지업"], s:147}, {n:"유영찬", b:["포심", "슬라이더"], s:154}],
+            "삼성": [{n:"원태인", b:["포심", "체인지업"], s:150}, {n:"오승환", b:["포심", "슬라이더"], s:149}],
+            "두산": [{n:"곽빈", b:["포심", "커브"], s:155}, {n:"김택연", b:["포심", "슬라이더"], s:156}],
+            "KT": [{n:"고영표", b:["체인지업", "커브"], s:145}, {n:"박영현", b:["포심", "슬라이더"], s:153}],
+            "롯데": [{n:"반즈", b:["포심", "슬라이더"], s:150}, {n:"김원중", b:["포심", "포크"], s:152}],
+            "NC": [{n:"신민혁", b:["포심", "체인지업"], s:147}, {n:"이용찬", b:["포심", "포크"], s:149}],
+            "키움": [{n:"후라도", b:["포심", "커터"], s:152}, {n:"조상우", b:["포심", "슬라이더"], s:156}]
+        };
+
+        let myTeam = "", currentPitcher = null;
+        let isPlayerBatting = false; 
+        let state = "LOBBY"; 
+        let aimX = 450, aimY = 340;
+        let ball = { z: 100, active: false, x:450, y:220, targetX:450, targetY:340, type:'포심', trail:[] };
+        let B=0, S=0, O=0, inning=1, scAway=0, scHome=0;
+        let isSwinging = false; let swingTimer = 0;
+        let floatingTexts = []; let screenShake = 0;
+
+        const fielders = [
+            {x: 220, y: 150, s: 0.45}, {x: 450, y: 135, s: 0.4}, {x: 680, y: 150, s: 0.45},
+            {x: 290, y: 240, s: 0.7}, {x: 370, y: 200, s: 0.6}, {x: 530, y: 200, s: 0.6}, {x: 610, y: 240, s: 0.7}
+        ];
+
+        const teamGrid = document.getElementById("teamGrid");
+        Object.keys(kboDB).forEach(team => {
+            const card = document.createElement("div");
+            card.className = "team-card"; card.innerText = team;
+            card.onclick = () => selectTeam(team);
+            teamGrid.appendChild(card);
+        });
+
+        function selectTeam(team) {
+            myTeam = team; state = "READY";
+            document.getElementById("lobbyOverlay").style.display = "none";
+            document.getElementById("uiHomeTeam").innerText = `${team} (나)`;
+            
+            let opps = Object.keys(kboDB).filter(t => t !== team);
+            document.getElementById("uiAwayTeam").innerText = opps[Math.floor(Math.random()*opps.length)] + " (상대)";
+
+            const pSelect = document.getElementById("pitcherSelect");
+            pSelect.innerHTML = "";
+            kboDB[team].forEach(p => {
+                const opt = document.createElement("option"); opt.value = p.n; opt.innerText = p.n; pSelect.appendChild(opt);
+            });
+            syncPitcher(); setupTurn();
+        }
+
+        function syncPitcher() {
+            const pName = document.getElementById("pitcherSelect").value;
+            currentPitcher = kboDB[myTeam].find(p => p.n === pName);
+            const bSelect = document.getElementById("ballSelect");
+            bSelect.innerHTML = "";
+            currentPitcher.b.forEach(b => {
+                const opt = document.createElement("option"); opt.value = b; opt.innerText = b; bSelect.appendChild(opt);
+            });
+            document.getElementById("speedSlider").max = currentPitcher.s;
+            document.getElementById("speedSlider").value = currentPitcher.s - 5;
+            document.getElementById('speedVal').innerText = document.getElementById("speedSlider").value;
+        }
+
+        document.addEventListener("keydown", (e) => {
+            if(state === "READY" && !isPlayerBatting) {
+                if(e.key === "ArrowLeft") aimX -= 12; if(e.key === "ArrowRight") aimX += 12;
+                if(e.key === "ArrowUp") aimY -= 12; if(e.key === "ArrowDown") aimY += 12;
+                aimX = Math.max(350, Math.min(550, aimX)); aimY = Math.max(220, Math.min(440, aimY));
+            }
+            if(e.key === " ") { e.preventDefault(); actionBtnClick(); }
+        });
+
+        function actionBtnClick() {
+            if(!isPlayerBatting && state === "READY") throwBall();
+            else if (isPlayerBatting && state === "ACTION" && !isSwinging) swingBat();
+        }
+
+        function setupTurn() {
+            state = "READY"; isSwinging = false; ball.active = false; ball.trail = [];
+            document.getElementById("pitchControls").style.display = isPlayerBatting ? "none" : "flex";
+            document.getElementById("batControls").style.display = isPlayerBatting ? "flex" : "none";
+            document.getElementById("turnIndicator").innerText = isPlayerBatting ? "MY TURN: 공격 (타격)" : "MY TURN: 수비 (투구)";
+            document.getElementById("turnIndicator").style.borderColor = isPlayerBatting ? "#60a5fa" : "#f87171";
+            
+            if(isPlayerBatting) {
+                msgDiv.style.display = "block"; msgDiv.innerText = "투수 와인드업 중...";
+                setTimeout(aiThrowBall, 1500 + Math.random()*1500);
+            } else {
+                msgDiv.style.display = "block"; msgDiv.innerText = "조준 후 투구하세요 (Space)"; aimX = 450; aimY = 340;
+            }
+            updateUI();
+        }
+
+        function throwBall() {
+            state = "ACTION"; msgDiv.style.display = "none";
+            let spd = document.getElementById("speedSlider").value / 60;
+            let type = document.getElementById("ballSelect").value;
+            ball = { z:100, active:true, targetX:aimX, targetY:aimY, speed: spd, type: type, trail:[] };
+        }
+
+        function aiThrowBall() {
+            if(state !== "READY" || !isPlayerBatting) return;
+            state = "ACTION"; msgDiv.style.display = "none";
+            let tx = 390 + Math.random()*120; let ty = 280 + Math.random()*130;
+            ball = { z:100, active:true, targetX:tx, targetY:ty, speed: 2.3 + Math.random()*0.4, type: Math.random()>0.5?'포심':'커브', trail:[] };
+        }
+
+        function swingBat() {
+            isSwinging = true; swingTimer = 15;
+            if(ball.z > 5 && ball.z < 25) {
+                let inZone = (ball.targetX > 380 && ball.targetX < 520 && ball.targetY > 260 && ball.targetY < 420);
+                if(inZone) { processHitResult(true); return; }
+            }
+        }
+
+        function evaluateResult() {
+            ball.active = false;
+            const inZone = (ball.targetX > 400 && ball.targetX < 500 && ball.targetY > 280 && ball.targetY < 400);
+            
+            if(!isPlayerBatting) {
+                const aiSwingProb = inZone ? 0.8 : 0.25;
+                if(Math.random() < aiSwingProb) {
+                    isSwinging = true; swingTimer = 15;
+                    if(Math.random() < 0.4) processHitResult(false);
+                    else processHitResult(true);
+                } else {
+                    if(inZone) addStrike("루킹 스트라이크!"); else addBall("볼!");
+                }
+            } else {
+                if(isSwinging) addStrike("헛스윙!");
+                else { if(inZone) addStrike("스트라이크!"); else addBall("볼!"); }
+            }
+        }
+
+        function processHitResult(isHit) {
+            state = "RESULT"; ball.active = false; screenShake = 20;
+            if(!isHit) { addStrike("헛스윙!"); return; }
+            if(Math.random() > 0.6) { addFloat("💥 쾌조의 안타!", "#3b82f6"); advanceRun(1); B=0; S=0; } 
+            else { addFloat("⚾ 아웃! (범타)", "#ef4444"); O++; B=0; S=0; checkOuts(); }
+            setTimeout(setupTurn, 1600);
+        }
+
+        function addStrike(msg) { S++; addFloat(msg, "#fbbf24"); if(S>=3){ S=0; B=0; O++; addFloat("삼진 아웃!!", "#ef4444"); checkOuts(); } setTimeout(setupTurn, 1500); }
+        function addBall(msg) { B++; addFloat(msg, "#34d399"); if(B>=4){ S=0; B=0; advanceRun(1); addFloat("볼넷 출루", "#60a5fa"); } setTimeout(setupTurn, 1500); }
+        function advanceRun(pts) { if(isPlayerBatting) scHome+=pts; else scAway+=pts; updateUI(); }
+
+        function checkOuts() {
+            if(O>=3) {
+                O=0; B=0; S=0; isPlayerBatting = !isPlayerBatting;
+                if(!isPlayerBatting) inning++;
+                addFloat("이닝 교대!", "#f87171");
+            }
+            updateUI();
+        }
+
+        function updateUI() {
+            for(let i=1; i<=3; i++) document.getElementById("b"+i).className = `circle ${B>=i?'b-on':''}`;
+            for(let i=1; i<=2; i++) document.getElementById("s"+i).className = `circle ${S>=i?'s-on':''}`;
+            for(let i=1; i<=2; i++) document.getElementById("o"+i).className = `circle ${O>=i?'o-on':''}`;
+            document.getElementById("uiInning").innerText = `${inning}회${isPlayerBatting ? '말 공격' : '초 수비'}`;
+            document.getElementById("scAway").innerText = scAway; document.getElementById("scHome").innerText = scHome;
+        }
+
+        function addFloat(txt, color) { floatingTexts.push({ t: txt, c: color, y: 250, a: 1.0 }); }
+
+        function drawStadium() {
+            let skyGrad = ctx.createRadialGradient(450, 150, 50, 450, 150, 400);
+            skyGrad.addColorStop(0, "#1e3a8a"); skyGrad.addColorStop(1, "#020617");
+            ctx.fillStyle = skyGrad; ctx.fillRect(0,0,900,180);
+            
+            ctx.fillStyle = "#0f172a"; ctx.fillRect(0,160,900,20);
+            ctx.strokeStyle = "#fbbf24"; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(0, 160); ctx.lineTo(900, 160); ctx.stroke();
+
+            for(let i=0; i<15; i++) {
+                ctx.fillStyle = i%2===0 ? "#14532d" : "#166534";
+                ctx.beginPath();
+                ctx.moveTo(0, 180 + i*8); ctx.lineTo(900, 180 + i*8);
+                ctx.lineTo(900, 180 + (i+1)*8); ctx.lineTo(0, 180 + (i+1)*8); ctx.fill();
+            }
+
+            ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(450, 470); ctx.lineTo(0, 180); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(450, 470); ctx.lineTo(900, 180); ctx.stroke();
+
+            let dirtGrad = ctx.createLinearGradient(0, 200, 0, 520);
+            dirtGrad.addColorStop(0, "#7c2d12"); dirtGrad.addColorStop(1, "#451a03");
+            ctx.fillStyle = dirtGrad; ctx.beginPath();
+            ctx.moveTo(450, 190); ctx.lineTo(760, 320); ctx.lineTo(450, 480); ctx.lineTo(140, 320); ctx.fill();
+
+            ctx.fillStyle = "#15803d"; ctx.beginPath();
+            ctx.moveTo(450, 230); ctx.lineTo(600, 310); ctx.lineTo(450, 390); ctx.lineTo(300, 310); ctx.fill();
+
+            ctx.fillStyle = "#f8fafc";
+            const drawBase = (bx, by) => {
+                ctx.beginPath(); ctx.moveTo(bx, by-5); ctx.lineTo(bx+10, by); ctx.lineTo(bx, by+5); ctx.lineTo(bx-10, by); ctx.fill();
+            };
+            drawBase(600, 310); 
+            drawBase(450, 230); 
+            drawBase(300, 310); 
+
+            ctx.fillStyle = "#92400e"; ctx.beginPath(); ctx.ellipse(450, 250, 45, 18, 0, 0, Math.PI*2); ctx.fill();
+            ctx.fillStyle = "#fff"; ctx.fillRect(440, 247, 20, 4); 
+            
+            ctx.beginPath(); ctx.moveTo(430, 450); ctx.lineTo(470, 450); ctx.lineTo(480, 465); ctx.lineTo(450, 480); ctx.lineTo(420, 465); ctx.fill();
+        }
+
+        function drawEntities() {
+            fielders.forEach(f => {
+                ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.beginPath(); ctx.ellipse(f.x, f.y+18*f.s, 14*f.s, 5*f.s, 0, 0, Math.PI*2); ctx.fill(); 
+                ctx.fillStyle = "#e2e8f0"; ctx.fillRect(f.x-6*f.s, f.y, 12*f.s, 20*f.s); 
+                ctx.fillStyle = "#1e293b"; ctx.fillRect(f.x-6*f.s, f.y-6*f.s, 12*f.s, 6*f.s); 
+                ctx.fillStyle = "#fbcfe8"; ctx.beginPath(); ctx.arc(f.x, f.y-2*f.s, 4*f.s, 0, Math.PI*2); ctx.fill(); 
+            });
+
+            ctx.fillStyle = "#cbd5e1"; ctx.fillRect(445, 210, 12, 35); 
+            ctx.fillStyle = "#0f172a"; ctx.fillRect(445, 200, 12, 8); 
+            ctx.fillStyle = "#fbcfe8"; ctx.beginPath(); ctx.arc(451, 208, 6, 0, Math.PI*2); ctx.fill();
+
+            ctx.fillStyle = "#94a3b8"; ctx.fillRect(340, 350, 28, 95);
+            ctx.fillStyle = "#0f172a"; ctx.beginPath(); ctx.arc(354, 335, 14, 0, Math.PI*2); ctx.fill(); 
+            
+            ctx.save(); ctx.translate(368, 370);
+            if(isSwinging) {
+                ctx.rotate(55 * Math.PI/180); ctx.fillStyle = "#fbbf24"; ctx.fillRect(0, -6, 85, 12);
+                swingTimer--; if(swingTimer<=0) isSwinging = false;
+            } else {
+                ctx.rotate(-50 * Math.PI/180); ctx.fillStyle = "#d97706"; ctx.fillRect(0, -5, 75, 10);
+            }
+            ctx.restore();
+        }
+
+        function drawBallEngine() {
+            ctx.strokeStyle = "rgba(56, 189, 248, 0.4)"; ctx.lineWidth = 2;
+            ctx.strokeRect(400, 280, 100, 120);
+            ctx.strokeStyle = "rgba(56, 189, 248, 0.15)"; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(433, 280); ctx.lineTo(433, 400); ctx.moveTo(466, 280); ctx.lineTo(466, 400);
+            ctx.moveTo(400, 320); ctx.lineTo(500, 320); ctx.moveTo(400, 360); ctx.lineTo(500, 360); ctx.stroke();
+
+            if(!isPlayerBatting && state === "READY") {
+                ctx.strokeStyle = "#f43f5e"; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(aimX, aimY, 10, 0, Math.PI*2); ctx.stroke();
+                ctx.fillStyle = "rgba(244, 63, 94, 0.3)"; ctx.fill();
+            }
+
+            if(ball.active) {
+                ball.z -= ball.speed;
+                let scale = 1 - (ball.z / 100);
+                
+                let curveAmount = ball.type !== '포심' ? Math.sin(scale * Math.PI) * 60 : 0;
+                let curX = 450 + (ball.targetX - 450) * scale + curveAmount;
+                let curY = 220 + (ball.targetY - 220) * scale;
+                let curRad = 3 + (16 * scale);
+
+                ball.trail.push({x: curX, y: curY, r: curRad});
+                if(ball.trail.length > 8) ball.trail.shift();
+
+                ball.trail.forEach((t, i) => {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${i/10})`;
+                    ctx.beginPath(); ctx.arc(t.x, t.y, t.r*0.9, 0, Math.PI*2); ctx.fill();
+                });
+
+                let groundY = 250 + (450 - 250) * scale;
+                ctx.fillStyle = "rgba(0,0,0,0.5)";
+                ctx.beginPath(); ctx.ellipse(curX, groundY, curRad*1.3, curRad*0.35, 0, 0, Math.PI*2); ctx.fill();
+
+                ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(curX, curY, curRad, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = "#94a3b8"; ctx.lineWidth=1.5; ctx.stroke();
+
+                if(ball.z <= 0) evaluateResult();
+            }
+        }
+
+        function loop() {
+            // [버그 수정 완료] 루프가 멈추지 않도록 항상 다음 프레임을 요청합니다!
+            requestAnimationFrame(loop); 
+            
+            if(state === "LOBBY") return;
+
+            ctx.save();
+            if (screenShake > 0) { ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake); screenShake--; }
+            
+            ctx.clearRect(0,0,900,520);
+            drawStadium();
+            drawEntities();
+            drawBallEngine();
+
+            for(let i=floatingTexts.length-1; i>=0; i--) {
+                let ft = floatingTexts[i];
+                ctx.font = "italic 900 42px 'Noto Sans KR'"; ctx.textAlign = "center";
+                ctx.fillStyle = ft.c; ctx.globalAlpha = ft.a;
+                ctx.lineWidth = 6; ctx.strokeStyle = "#000"; ctx.strokeText(ft.t, 450, ft.y);
+                ctx.fillText(ft.t, 450, ft.y);
+                ft.y -= 2; ft.a -= 0.02; ctx.globalAlpha = 1.0;
+                if(ft.a <= 0) floatingTexts.splice(i, 1);
+            }
+            ctx.restore();
+        }
+        
+        requestAnimationFrame(loop);
+    </script>
+</body>
+</html>
+"""
+
+components.html(premium_baseball_html, height=550, width=950, scrolling=False)
