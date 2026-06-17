@@ -5,7 +5,7 @@ import streamlit.components.v1 as components
 st.set_page_config(page_title="Vertical Brick Breaker", layout="centered")
 
 # 깔끔한 제목
-st.title("📱 세로형 익스트림 벽돌 깨기 (스테이지 클리어 버전)")
+st.title("📱 세로형 익스트림 벽돌 깨기 (관리자 모드 추가)")
 
 # 게임 로직 HTML/JS
 brick_breaker_html = """
@@ -57,10 +57,27 @@ brick_breaker_html = """
             line-height: 1.6;
             width: 80%;
         }
+        /* 관리자 모드 UI 스타일 */
+        #adminUi {
+            display: none;
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(255, 0, 127, 0.85);
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+            box-shadow: 0 0 10px rgba(255, 0, 127, 0.5);
+            z-index: 10;
+        }
     </style>
 </head>
 <body>
     <div id="gameContainer">
+        <div id="adminUi">[ADMIN MODE] 대괄호 키로 조작 가능 ( [ : 이전 / ] : 다음 )</div>
         <div id="gameUi">
             <div>STAGE: <span id="stage" class="stat-val">1</span></div>
             <div>SCORE: <span id="score" class="stat-val">0</span></div>
@@ -77,6 +94,7 @@ brick_breaker_html = """
         const livesSpan = document.getElementById("lives");
         const stageSpan = document.getElementById("stage");
         const msgDiv = document.getElementById("msg");
+        const adminUi = document.getElementById("adminUi");
 
         const ballRadius = 7;
         const paddleHeight = 12;
@@ -103,6 +121,10 @@ brick_breaker_html = """
         let baseSpeed = 4.0;
         let laserTimer = 0;
         let shieldTimer = 0;
+
+        // 치트키 입력을 감지하기 위한 문자열 변수
+        let cheatBuffer = "";
+        let isAdmin = false;
 
         function initBricks() {
             bricks = [];
@@ -165,10 +187,43 @@ brick_breaker_html = """
             });
         }
 
+        // 스테이지 강제 변경 함수 (관리자용)
+        function changeStage(direction) {
+            if (direction === 'next') {
+                stage++;
+            } else if (direction === 'prev' && stage > 1) {
+                stage--;
+            }
+            stageSpan.innerText = stage;
+            baseSpeed = 4.0 + (stage - 1) * 0.3; // 스테이지에 맞게 속도 재계산
+            gameActive = false;
+            balls = []; items = []; lasers = []; laserTimer = 0; shieldTimer = 0;
+            initBricks();
+            msgDiv.innerHTML = `⚙️ 관리자 권한으로 STAGE ${stage} 이동 ⚙️<br>화면을 클릭해 시작하세요!`;
+            msgDiv.style.display = "block";
+        }
+
         initBricks();
 
         // 입력 감지
         document.addEventListener("keydown", (e) => {
+            // 1. 치트키 버퍼 기록 (joonmin 체크)
+            cheatBuffer += e.key.toLowerCase();
+            if (cheatBuffer.endsWith("joonmin")) {
+                isAdmin = !isAdmin; // 치트 토글
+                adminUi.style.display = isAdmin ? "block" : "none";
+                cheatBuffer = ""; // 버퍼 초기화
+            }
+            // 너무 길어지면 자르기
+            if (cheatBuffer.length > 20) cheatBuffer = cheatBuffer.substring(10);
+
+            // 2. 관리자 모드 전용 스테이지 이동 키 판단
+            if (isAdmin) {
+                if (e.key === "]") { changeStage('next'); return; }
+                if (e.key === "[") { changeStage('prev'); return; }
+            }
+
+            // 일반 게임 조작
             if (e.key == "Right" || e.key == "ArrowRight") rightPressed = true;
             else if (e.key == "Left" || e.key == "ArrowLeft") leftPressed = true;
             
@@ -216,14 +271,12 @@ brick_breaker_html = """
                 ctx.closePath();
             }
 
-            // 부숴야 할 남은 블록 개수 카운트 변수
             let breakableBricksLeft = 0;
 
             for (let c = 0; c < bricks.length; c++) {
                 for (let r = 0; r < bricks[c].length; r++) {
                     let b = bricks[c][r];
                     if (b.status == 1) {
-                        // 강철 블록이 아니면 무조건 깨야 할 블록으로 체크
                         if (b.type !== 'unbreakable') breakableBricksLeft++;
                         
                         let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
@@ -246,11 +299,10 @@ brick_breaker_html = """
                 }
             }
 
-            // 점수와 상관없이 부술 수 있는 블록이 0개가 되면 무조건 스테이지 증가!
             if (breakableBricksLeft === 0 && gameActive) {
                 stage++;
                 stageSpan.innerText = stage;
-                baseSpeed += 0.3; // 스테이지 증가 시 속도 소폭 상승
+                baseSpeed += 0.3;
                 gameActive = false;
                 balls = []; items = []; lasers = []; laserTimer = 0; shieldTimer = 0;
                 initBricks();
