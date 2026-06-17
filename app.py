@@ -2,17 +2,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # 페이지 설정
-st.set_page_config(page_title="Extreme Brick Breaker", layout="wide")
+st.set_page_config(page_title="Vertical Brick Breaker", layout="centered")
 
-# 제목
-st.title("🧱 익스트림 벽돌 깨기: 보스 레이드 & 레이저 에디션")
+# 깔끔한 제목
+st.title("📱 세로형 익스트림 벽돌 깨기 (스테이지 클리어 버전)")
 
 # 게임 로직 HTML/JS
 brick_breaker_html = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Boss & Laser Brick Breaker</title>
+    <title>Vertical Extreme Brick Breaker</title>
     <style>
         body {
             margin: 0;
@@ -23,24 +23,25 @@ brick_breaker_html = """
             align-items: center;
             background-color: #0e1117;
             color: #fff;
-            font-family: 'Courier New', Courier, monospace;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             height: 100vh;
             overflow: hidden;
         }
         #gameContainer { position: relative; }
         #gameCanvas {
-            border: 5px solid #4a90e2;
-            background-color: #05070a;
-            box-shadow: 0 0 35px rgba(74, 144, 226, 0.4);
-            border-radius: 10px;
+            border: 4px solid #4a90e2;
+            background-color: #0c0f14;
+            box-shadow: 0 0 25px rgba(74, 144, 226, 0.3);
+            border-radius: 12px;
         }
         #gameUi {
             display: flex;
             justify-content: space-between;
-            width: 800px;
-            margin-bottom: 10px;
-            font-size: 22px;
-            font-weight: bold;
+            width: 420px;
+            margin-bottom: 8px;
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
         }
         .stat-val { color: #00ffcc; }
         #msg {
@@ -49,11 +50,12 @@ brick_breaker_html = """
             left: 50%;
             transform: translate(-50%, -50%);
             text-align: center;
-            font-size: 26px;
+            font-size: 18px;
             color: #fff;
-            text-shadow: 2px 2px #000;
+            text-shadow: 1px 1px 4px #000;
             pointer-events: none;
-            line-height: 1.5;
+            line-height: 1.6;
+            width: 80%;
         }
     </style>
 </head>
@@ -64,8 +66,8 @@ brick_breaker_html = """
             <div>SCORE: <span id="score" class="stat-val">0</span></div>
             <div>LIVES: <span id="lives" class="stat-val">3</span></div>
         </div>
-        <canvas id="gameCanvas" width="800" height="550"></canvas>
-        <div id="msg">방향키(← →)를 눌러 시작하세요!<br>[보라 아이템 획득 시 스페이스바 키로 레이저 발사!]</div>
+        <canvas id="gameCanvas" width="420" height="600"></canvas>
+        <div id="msg">화면이나 방향키(← →)를 눌러 시작하세요!<br>[⚡획득 시 스페이스바로 레이저 발사!]</div>
     </div>
 
     <script>
@@ -76,17 +78,15 @@ brick_breaker_html = """
         const stageSpan = document.getElementById("stage");
         const msgDiv = document.getElementById("msg");
 
-        // 설정
-        const ballRadius = 8;
-        const paddleHeight = 15;
-        const paddleWidth = 110;
-        const brickWidth = 75;
-        const brickHeight = 22;
-        const brickPadding = 10;
-        const brickOffsetTop = 60;
-        const brickOffsetLeft = 20;
+        const ballRadius = 7;
+        const paddleHeight = 12;
+        const paddleWidth = 85;
+        const brickWidth = 40;
+        const brickHeight = 18;
+        const brickPadding = 5;
+        const brickOffsetTop = 50;
+        const brickOffsetLeft = 12;
 
-        // 게임 상태
         let score = 0;
         let lives = 3;
         let stage = 1;
@@ -96,40 +96,31 @@ brick_breaker_html = """
         let items = [];
         let lasers = [];
         let particles = [];
+        
         let rightPressed = false;
         let leftPressed = false;
         let gameActive = false;
-        let baseSpeed = 4.5;
-        let laserTimer = 0; // 레이저 지속 시간
+        let baseSpeed = 4.0;
+        let laserTimer = 0;
+        let shieldTimer = 0;
 
-        // 벽돌 초기화 (강철 블록 + 보스 블록 포함)
         function initBricks() {
             bricks = [];
-            const rows = 4;
-            const cols = 9;
-            const unbreakableCount = Math.min(stage - 1, 4); 
+            const rows = 5;
+            const cols = 9; 
 
             for (let c = 0; c < cols; c++) {
                 bricks[c] = [];
                 for (let r = 0; r < rows; r++) {
-                    // 중앙 부근에 보스 배치 (c:4, r:1)
-                    if (c === 4 && r === 1) {
-                        bricks[c][r] = { x: 0, y: 0, status: 1, type: 'boss', hp: 5 + stage, maxHp: 5 + stage };
+                    let rand = Math.random();
+                    if (rand < 0.08 && stage > 1) {
+                        bricks[c][r] = { x: 0, y: 0, status: 1, type: 'unbreakable' };
+                    } else if (rand < 0.18) {
+                        bricks[c][r] = { x: 0, y: 0, status: 1, type: 'exploding' };
+                    } else if (rand < 0.25) {
+                        bricks[c][r] = { x: 0, y: 0, status: 1, type: 'gold' };
                     } else {
                         bricks[c][r] = { x: 0, y: 0, status: 1, type: 'normal' };
-                    }
-                }
-            }
-
-            // 강철 블록 무작위 배치
-            if (stage > 1) {
-                let placed = 0;
-                while (placed < unbreakableCount) {
-                    let rc = Math.floor(Math.random() * cols);
-                    let rr = Math.floor(Math.random() * rows);
-                    if (bricks[rc][rr].type === 'normal') {
-                        bricks[rc][rr].type = 'unbreakable';
-                        placed++;
                     }
                 }
             }
@@ -139,35 +130,51 @@ brick_breaker_html = """
             return {
                 x: paddleX + paddleWidth / 2,
                 y: canvas.height - 40,
-                dx: baseSpeed * (Math.random() > 0.5 ? 1 : -1) * 0.7,
+                dx: baseSpeed * (Math.random() - 0.5) * 1.2,
                 dy: -baseSpeed,
                 active: true
             };
         }
 
-        // 파티클 생성
         function createParticles(x, y, color) {
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 6; i++) {
                 particles.push({
                     x: x, y: y,
-                    dx: (Math.random() - 0.5) * 4,
-                    dy: (Math.random() - 0.5) * 4,
+                    dx: (Math.random() - 0.5) * 3,
+                    dy: (Math.random() - 0.5) * 3,
                     alpha: 1,
                     color: color
                 });
             }
         }
 
+        function triggerExplosion(col, row) {
+            const targets = [
+                {c: col-1, r: row}, {c: col+1, r: row},
+                {c: col, r: row-1}, {c: col, r: row+1}
+            ];
+            targets.forEach(t => {
+                if (bricks[t.c] && bricks[t.c][t.r] && bricks[t.c][t.r].status === 1) {
+                    let targetBrick = bricks[t.c][t.r];
+                    if (targetBrick.type !== 'unbreakable') {
+                        targetBrick.status = 0;
+                        score += 10;
+                        createParticles(targetBrick.x + brickWidth/2, targetBrick.y + brickHeight/2, "#ff6600");
+                    }
+                }
+            });
+        }
+
         initBricks();
 
-        // 키 이벤트
+        // 입력 감지
         document.addEventListener("keydown", (e) => {
             if (e.key == "Right" || e.key == "ArrowRight") rightPressed = true;
             else if (e.key == "Left" || e.key == "ArrowLeft") leftPressed = true;
             
-            if (e.key == " " && laserTimer > 0 && gameActive) { // 스페이스바 레이저 발사
-                lasers.push({ x: paddleX + 15, y: canvas.height - 30 });
-                lasers.push({ x: paddleX + paddleWidth - 15, y: canvas.height - 30 });
+            if (e.key == " " && laserTimer > 0 && gameActive) {
+                lasers.push({ x: paddleX + 10, y: canvas.height - 25 });
+                lasers.push({ x: paddleX + paddleWidth - 10, y: canvas.height - 25 });
             }
 
             if (!gameActive && lives > 0) {
@@ -182,95 +189,99 @@ brick_breaker_html = """
             else if (e.key == "Left" || e.key == "ArrowLeft") leftPressed = false;
         });
 
+        canvas.addEventListener("mousemove", (e) => {
+            let relativeX = e.clientX - canvas.getBoundingClientRect().left;
+            if (relativeX > 0 && relativeX < canvas.width) {
+                paddleX = relativeX - paddleWidth / 2;
+            }
+            if (!gameActive && lives > 0 && e.buttons === 1) {
+                gameActive = true;
+                msgDiv.style.display = "none";
+                if (balls.length === 0) balls.push(createBall());
+            }
+        });
+
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            // 1. 벽돌 그리기 및 체크
-            let activeNormalBricks = 0;
+            if (shieldTimer > 0) {
+                shieldTimer--;
+                ctx.beginPath();
+                ctx.strokeStyle = "#00bfff";
+                ctx.lineWidth = 4;
+                ctx.moveTo(0, canvas.height - 2);
+                ctx.lineTo(canvas.width, canvas.height - 2);
+                ctx.stroke();
+                ctx.lineWidth = 1;
+                ctx.closePath();
+            }
+
+            // 부숴야 할 남은 블록 개수 카운트 변수
+            let breakableBricksLeft = 0;
+
             for (let c = 0; c < bricks.length; c++) {
                 for (let r = 0; r < bricks[c].length; r++) {
                     let b = bricks[c][r];
                     if (b.status == 1) {
-                        if (b.type !== 'unbreakable') activeNormalBricks++;
+                        // 강철 블록이 아니면 무조건 깨야 할 블록으로 체크
+                        if (b.type !== 'unbreakable') breakableBricksLeft++;
                         
                         let brickX = (c * (brickWidth + brickPadding)) + brickOffsetLeft;
                         let brickY = (r * (brickHeight + brickPadding)) + brickOffsetTop;
-                        b.x = brickX;
-                        b.y = brickY;
+                        b.x = brickX; b.y = brickY;
                         
                         ctx.beginPath();
                         ctx.rect(brickX, brickY, brickWidth, brickHeight);
                         
-                        if (b.type === 'unbreakable') {
-                            ctx.fillStyle = '#666';
-                        } else if (b.type === 'boss') {
-                            ctx.fillStyle = `rgb(${255 - (b.hp * 20)}, 0, 100)`; // 체력 깎일수록 밝아짐
-                        } else {
-                            ctx.fillStyle = `hsl(${stage * 35 + r * 25}, 70%, 50%)`;
-                        }
+                        if (b.type === 'unbreakable') ctx.fillStyle = '#555';
+                        else if (b.type === 'exploding') ctx.fillStyle = '#ff6600';
+                        else if (b.type === 'gold') ctx.fillStyle = '#ffd700';
+                        else ctx.fillStyle = `hsl(${stage * 40 + r * 20}, 75%, 55%)`;
                         
                         ctx.fill();
-                        ctx.strokeStyle = "#000";
+                        ctx.strokeStyle = "#0c0f14";
                         ctx.stroke();
                         ctx.closePath();
-
-                        // 보스 체력 바 표시
-                        if (b.type === 'boss') {
-                            ctx.fillStyle = "#fff";
-                            ctx.font = "12px sans-serif";
-                            ctx.fillText(`👑HP:${b.hp}`, brickX + 15, brickY + 15);
-                        }
                     }
                 }
             }
 
-            // 스테이지 클리어
-            if (activeNormalBricks === 0 && gameActive) {
+            // 점수와 상관없이 부술 수 있는 블록이 0개가 되면 무조건 스테이지 증가!
+            if (breakableBricksLeft === 0 && gameActive) {
                 stage++;
                 stageSpan.innerText = stage;
-                baseSpeed += 0.4;
+                baseSpeed += 0.3; // 스테이지 증가 시 속도 소폭 상승
                 gameActive = false;
-                balls = []; items = []; lasers = []; laserTimer = 0;
+                balls = []; items = []; lasers = []; laserTimer = 0; shieldTimer = 0;
                 initBricks();
-                msgDiv.innerHTML = `🎉 STAGE ${stage} CLEAR! 🎉<br>더 강력한 보스가 나타납니다!`;
+                msgDiv.innerHTML = `🎉 STAGE ${stage} START 🎉<br>화면을 클릭해 계속하세요!`;
                 msgDiv.style.display = "block";
             }
 
-            // 2. 패들 그리기 (레이저 상태면 색상 변경)
+            // 패들
             ctx.beginPath();
             ctx.rect(paddleX, canvas.height - paddleHeight - 10, paddleWidth, paddleHeight);
             ctx.fillStyle = laserTimer > 0 ? "#b000ff" : "#0095DD";
             ctx.fill();
             ctx.closePath();
 
-            if (laserTimer > 0) {
-                laserTimer--;
-                ctx.fillStyle = "#b000ff";
-                ctx.font = "12px sans-serif";
-                ctx.fillText(`LASER: ${Math.ceil(laserTimer/60)}s`, paddleX + 20, canvas.height - 30);
-            }
-
-            // 3. 레이저 이동 및 충돌
+            // 레이저
             for (let l = 0; l < lasers.length; l++) {
-                let laz = lasers[l];
-                laz.y -= 6;
+                let laz = lasers[l]; laz.y -= 7;
                 ctx.fillStyle = "#ff00ff";
-                ctx.fillRect(laz.x, laz.y, 4, 12);
+                ctx.fillRect(laz.x, laz.y, 3, 10);
 
-                // 레이저가 벽돌 맞췄을 때
                 let lazHit = false;
                 for (let c = 0; c < bricks.length; c++) {
                     for (let r = 0; r < bricks[c].length; r++) {
                         let br = bricks[c][r];
                         if (br.status == 1 && laz.x > br.x && laz.x < br.x + brickWidth && laz.y > br.y && laz.y < br.y + brickHeight) {
                             lazHit = true;
-                            if (br.type === 'normal') {
-                                br.status = 0; score += 10; scoreSpan.innerText = score;
-                                createParticles(br.x + brickWidth/2, br.y + brickHeight/2, "#ff00ff");
-                            } else if (br.type === 'boss') {
-                                br.hp--;
-                                createParticles(br.x + brickWidth/2, br.y + brickHeight/2, "#ff0000");
-                                if (br.hp <= 0) { br.status = 0; score += 100; scoreSpan.innerText = score; }
+                            if (br.type !== 'unbreakable') {
+                                br.status = 0;
+                                score += br.type === 'gold' ? 50 : 10;
+                                scoreSpan.innerText = score;
+                                if (br.type === 'exploding') triggerExplosion(c, r);
                             }
                             break;
                         }
@@ -280,41 +291,36 @@ brick_breaker_html = """
                 if (lazHit || laz.y < 0) { lasers.splice(l, 1); l--; }
             }
 
-            // 4. 아이템 관리 (3종 종류별 다른 색상)
+            if (laserTimer > 0) laserTimer--;
+
+            // 아이템
             for (let i = 0; i < items.length; i++) {
-                let it = items[i];
-                it.y += 2.5;
+                let it = items[i]; it.y += 2.2;
                 ctx.beginPath();
-                ctx.arc(it.x, it.y, 10, 0, Math.PI * 2);
-                ctx.fillStyle = it.type === 'BALL' ? "#00ff00" : (it.type === 'LASER' ? "#b000ff" : "#ff3333");
+                ctx.arc(it.x, it.y, 9, 0, Math.PI * 2);
+                ctx.fillStyle = it.type === 'BALL' ? "#00ff00" : (it.type === 'LASER' ? "#b000ff" : "#00bfff");
                 ctx.fill();
-                ctx.fillStyle = "#fff";
-                ctx.font = "10px sans-serif";
-                ctx.fillText(it.type === 'BALL' ? "⭐" : (it.type === 'LASER' ? "⚡" : "⏳"), it.x - 5, it.y + 4);
                 ctx.closePath();
 
-                // 획득 시
                 if (it.y > canvas.height - paddleHeight - 15 && it.x > paddleX && it.x < paddleX + paddleWidth) {
                     if (it.type === 'BALL') balls.push(createBall());
-                    else if (it.type === 'LASER') laserTimer = 400; // 약 7초간 레이저 모드
-                    else if (it.type === 'SLOW') { balls.forEach(b => { b.dx *= 0.6; b.dy *= 0.6; }); } // 슬로우 기믹
+                    else if (it.type === 'LASER') laserTimer = 350;
+                    else if (it.type === 'SHIELD') shieldTimer = 500;
                     items.splice(i, 1); i--;
                 } else if (it.y > canvas.height) { items.splice(i, 1); i--; }
             }
 
-            // 5. 파티클 이펙트 처리
+            // 파티클
             for (let p = 0; p < particles.length; p++) {
-                let pt = particles[p];
-                pt.x += pt.dx; pt.y += pt.dy; pt.alpha -= 0.02;
+                let pt = particles[p]; pt.x += pt.dx; pt.y += pt.dy; pt.alpha -= 0.025;
                 if (pt.alpha <= 0) { particles.splice(p, 1); p--; continue; }
-                ctx.save();
-                ctx.globalAlpha = pt.alpha;
+                ctx.save(); ctx.globalAlpha = pt.alpha;
                 ctx.fillStyle = pt.color;
-                ctx.fillRect(pt.x, pt.y, 3, 3);
+                ctx.fillRect(pt.x, pt.y, 2.5, 2.5);
                 ctx.restore();
             }
 
-            // 6. 공 관리
+            // 공
             for (let i = 0; i < balls.length; i++) {
                 let b = balls[i];
                 ctx.beginPath();
@@ -327,17 +333,19 @@ brick_breaker_html = """
                     if (b.x + b.dx > canvas.width - ballRadius || b.x + b.dx < ballRadius) b.dx = -b.dx;
                     if (b.y + b.dy < ballRadius) b.dy = -b.dy;
 
-                    // 패들 충돌
+                    if (b.y + b.dy > canvas.height - ballRadius && shieldTimer > 0) {
+                        b.dy = -b.dy;
+                    }
+
                     if (b.y + b.dy > canvas.height - paddleHeight - 10 - ballRadius) {
                         if (b.x > paddleX && b.x < paddleX + paddleWidth) {
                             let relX = (b.x - (paddleX + paddleWidth / 2)) / (paddleWidth / 2);
-                            b.dx = relX * baseSpeed; b.dy = -b.dy;
+                            b.dx = relX * baseSpeed * 1.2; b.dy = -b.dy;
                         } else if (b.y + b.dy > canvas.height) {
                             balls.splice(i, 1); i--; continue;
                         }
                     }
 
-                    // 벽돌 충돌
                     let breakFound = false;
                     for (let c = 0; c < bricks.length; c++) {
                         for (let r = 0; r < bricks[c].length; r++) {
@@ -345,24 +353,21 @@ brick_breaker_html = """
                             if (br.status == 1) {
                                 if (b.x > br.x && b.x < br.x + brickWidth && b.y > br.y && b.y < br.y + brickHeight) {
                                     b.dy = -b.dy;
-                                    if (br.type === 'normal') {
-                                        br.status = 0; score += 10; scoreSpan.innerText = score;
-                                        createParticles(br.x + brickWidth/2, br.y + brickHeight/2, "#00ffcc");
-                                        if (Math.random() < 0.20) {
-                                            let types = ['BALL', 'LASER', 'SLOW'];
-                                            items.push({ x: br.x + brickWidth / 2, y: br.y, type: types[Math.floor(Math.random()*types.length)] });
+                                    if (br.type !== 'unbreakable') {
+                                        br.status = 0;
+                                        score += br.type === 'gold' ? 50 : 10;
+                                        scoreSpan.innerText = score;
+                                        
+                                        if (br.type === 'exploding') triggerExplosion(c, r);
+                                        
+                                        let dropChance = br.type === 'gold' ? 0.60 : 0.15;
+                                        if (Math.random() < dropChance) {
+                                            let pool = ['BALL', 'LASER', 'SHIELD'];
+                                            items.push({ x: br.x + brickWidth/2, y: br.y, type: pool[Math.floor(Math.random()*pool.length)] });
                                         }
-                                    } else if (br.type === 'boss') {
-                                        br.hp--;
-                                        createParticles(br.x + brickWidth/2, br.y + brickHeight/2, "#ff0055");
-                                        if (br.hp <= 0) {
-                                            br.status = 0; score += 100; scoreSpan.innerText = score;
-                                            // 보스 처치 시 무조건 아이템 대량 드롭
-                                            items.push({ x: br.x + 20, y: br.y, type: 'BALL' });
-                                            items.push({ x: br.x + 50, y: br.y, type: 'LASER' });
-                                        }
-                                    } else if (br.type === 'unbreakable') {
-                                        createParticles(br.x + brickWidth/2, br.y + brickHeight/2, "#ffffff");
+                                        createParticles(br.x + brickWidth/2, br.y + brickHeight/2, br.type === 'gold' ? '#ffd700' : '#00ffcc');
+                                    } else {
+                                        createParticles(br.x + brickWidth/2, br.y + brickHeight/2, '#ffffff');
                                     }
                                     breakFound = true; break;
                                 }
@@ -374,21 +379,19 @@ brick_breaker_html = """
                 }
             }
 
-            // 라이프 소진 체크
             if (balls.length === 0 && gameActive) {
                 lives--; livesSpan.innerText = lives; gameActive = false; laserTimer = 0;
                 if (lives <= 0) {
-                    msgDiv.innerHTML = "💥 GAME OVER 💥<br>새로고침(F5)을 눌러 다시 도전하세요!";
+                    msgDiv.innerHTML = "💥 GAME OVER 💥<br>새로고침(F5)으로 재도전!";
                     msgDiv.style.display = "block";
                 } else {
-                    msgDiv.innerText = "공을 놓쳤습니다! 방향키를 누르면 다시 발사됩니다.";
+                    msgDiv.innerText = "터치나 화살표 키로 재발사!";
                     msgDiv.style.display = "block";
                 }
             }
 
-            // 패들 이동
-            if (rightPressed && paddleX < canvas.width - paddleWidth) paddleX += 7.5;
-            else if (leftPressed && paddleX > 0) paddleX -= 7.5;
+            if (rightPressed && paddleX < canvas.width - paddleWidth) paddleX += 6;
+            else if (leftPressed && paddleX > 0) paddleX -= 6;
 
             requestAnimationFrame(draw);
         }
@@ -398,5 +401,4 @@ brick_breaker_html = """
 </html>
 """
 
-# 컴포넌트 렌더링
-components.html(brick_breaker_html, height=650, scrolling=False)
+components.html(brick_breaker_html, height=670, scrolling=False)
