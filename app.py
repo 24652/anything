@@ -2,17 +2,17 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 # 페이지 설정
-st.set_page_config(page_title="Vertical Rhythm Game", layout="centered")
+st.set_page_config(page_title="Vertical Baseball Game", layout="centered")
 
-# 깔끔한 제목
-st.title("🎵 세로형 모바일 리듬 게임")
+# 타이틀
+st.title("⚾ 세로형 원버튼 야구 게임 (홈런 더비)")
 
-# 리듬 게임 HTML/JS
-rhythm_game_html = """
+# 야구 게임 HTML/JS
+baseball_game_html = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Vertical Rhythm Game</title>
+    <title>Vertical Baseball Game</title>
     <style>
         body {
             margin: 0;
@@ -29,9 +29,9 @@ rhythm_game_html = """
         }
         #gameContainer { position: relative; }
         #gameCanvas {
-            border: 4px solid #a932ff;
-            background-color: #0b0813;
-            box-shadow: 0 0 25px rgba(169, 50, 255, 0.4);
+            border: 4px solid #2ecc71;
+            background-color: #1b3a24; /* 야구장 느낌의 녹색 톤 */
+            box-shadow: 0 0 25px rgba(46, 204, 113, 0.4);
             border-radius: 12px;
         }
         #gameUi {
@@ -78,117 +78,169 @@ rhythm_game_html = """
         <div id="adminUi">[ADMIN MODE] 대괄호 키로 조작 가능 ( [ : 이전 / ] : 다음 )</div>
         <div id="gameUi">
             <div>STAGE: <span id="stage" class="stat-val">1</span></div>
-            <div>COMBO: <span id="combo" class="stat-val">0</span></div>
-            <div>LIVES: <span id="lives" class="stat-val">10</span></div>
+            <div>HOMERUNS: <span id="homeruns" class="stat-val">0</span>/<span id="target" class="stat-val">5</span></div>
+            <div>OUTS: <span id="outs" class="stat-val">0</span>/3</div>
         </div>
         <canvas id="gameCanvas" width="400" height="600"></canvas>
-        <div id="msg">키보드 D, F, J, K 또는 화면을 터치하세요!<br>스페이스바나 클릭 시 음악이 시작됩니다.</div>
+        <div id="msg">스페이스바를 누르거나 화면을 터치하면<br>투수가 공을 던집니다!</div>
     </div>
 
     <script>
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
-        const comboSpan = document.getElementById("combo");
-        const livesSpan = document.getElementById("lives");
+        const homerunsSpan = document.getElementById("homeruns");
+        const targetSpan = document.getElementById("target");
+        const outsSpan = document.getElementById("outs");
         const stageSpan = document.getElementById("stage");
         const msgDiv = document.getElementById("msg");
         const adminUi = document.getElementById("adminUi");
 
-        // 게임 설정 변수
+        // 게임 변수
         let stage = 1;
-        let combo = 0;
-        let maxCombo = 0;
-        let lives = 10;
-        let score = 0;
+        let homeruns = 0;
+        let targetHomeruns = 5;
+        let outs = 0;
         let gameActive = false;
-        let noteSpeed = 5;
-        let notes = [];
-        let totalNotesCreated = 0;
-        let totalNotesLimit = 40; // 한 스테이지당 내려올 총 노트 개수
+        let gameOver = false;
 
-        // 판정선 및 라인 세팅
-        const lineCount = 4;
-        const lineWidth = canvas.width / lineCount;
-        const judgmentY = canvas.height - 80; // 판정선 높이
-        const noteHeight = 20;
+        // 공 변수
+        let ball = { x: 200, y: 150, radius: 8, dy: 0, dx: 0, active: false, type: 'normal' };
+        let pitcherY = 150;
+        let batterY = 500;
+        let strikeZoneY = 500; // 타격 타이밍 중심선
+        let strikeZoneHeight = 35; // 타격 가능 오차 범위
 
-        // 조작 키 맵핑
-        const keys = { 'd': 0, 'f': 1, 'j': 2, 'k': 3 };
-        let keyStatus = [false, false, false, false];
-        let judgmentTexts = []; // 판정 텍스트 이펙트 배열
+        // 배트 휘두르기 애니메이션 변수
+        let batAngle = 0;
+        let isSwinging = false;
 
-        // 관리자 모드 관련
+        // 피드백 이펙트
+        let feedbackText = "";
+        let feedbackAlpha = 0;
+        let ballHitAnimation = { x: 0, y: 0, active: false, timer: 0, dx: 0, dy: 0 };
+
+        // 관리자 모드용
         let cheatBuffer = "";
         let isAdmin = false;
 
         function initStage() {
-            notes = [];
-            totalNotesCreated = 0;
-            totalNotesLimit = 30 + stage * 10;
-            noteSpeed = 5 + stage * 0.8;
-            lives = 10;
-            combo = 0;
-            comboSpan.innerText = combo;
-            livesSpan.innerText = lives;
+            homeruns = 0;
+            targetHomeruns = 3 + stage * 2;
+            outs = 0;
+            ball.active = false;
+            isSwinging = false;
+            gameOver = false;
+            
+            homerunsSpan.innerText = homeruns;
+            targetSpan.innerText = targetHomeruns;
+            outsSpan.innerText = outs;
             stageSpan.innerText = stage;
         }
 
-        // 무작위 노트 생성 패턴
-        function spawnNote() {
-            if (totalNotesCreated >= totalNotesLimit) return;
+        function throwBall() {
+            if (ball.active || gameOver) return;
             
-            let lane = Math.floor(Math.random() * lineCount);
-            let isGold = Math.random() < 0.15; // 15% 확률로 황금 보너스 노트
-            notes.push({
-                lane: lane,
-                y: -noteHeight,
-                type: isGold ? 'gold' : 'normal'
-            });
-            totalNotesCreated++;
+            ball.x = 200;
+            ball.y = pitcherY;
+            ball.radius = 6;
+            ball.active = true;
+            
+            // 스테이지별 구질 다양화
+            let rand = Math.random();
+            if (stage >= 3 && rand < 0.3) {
+                ball.type = 'changeup'; // 날아오다가 느려지는 공
+                ball.dy = 3.5;
+            } else if (stage >= 2 && rand < 0.5) {
+                ball.type = 'fast'; // 빠른 직구
+                ball.dy = 6.5 + (stage * 0.3);
+            } else {
+                ball.type = 'normal';
+                ball.dy = 4.5 + (stage * 0.2);
+            }
+            ball.dx = (Math.random() - 0.5) * 0.5; // 미세한 좌우 흔들림
+            msgDiv.style.display = "none";
         }
 
-        function checkHit(lane) {
-            let hitFound = false;
-            for (let i = 0; i < notes.length; i++) {
-                let n = notes[i];
-                if (n.lane === lane) {
-                    // 판정선 타겟 거리에 수렴하는지 체크 (오차범위 계산)
-                    let distance = Math.abs(n.y - judgmentY);
-                    if (distance < 45) {
-                        hitFound = true;
-                        let rating = "PERFECT";
-                        if (distance <= 15) { rating = "PERFECT"; combo++; }
-                        else if (distance <= 30) { rating = "GOOD"; combo++; }
-                        else { rating = "BAD"; combo = 0; lives = Math.max(0, lives - 1); }
-                        
-                        if (n.type === 'gold' && rating !== "BAD") combo += 2; // 골드노트는 추가 콤보
-                        
-                        judgmentTexts.push({ text: rating, alpha: 1, y: judgmentY - 40, color: rating === "PERFECT" ? "#ff00cc" : "#00ffcc" });
-                        notes.splice(i, 1);
-                        break;
+        function swingBat() {
+            if (isSwinging || gameOver) return;
+            isSwinging = true;
+            batAngle = -Math.PI / 4; // 휘두르기 시작 각도
+
+            if (ball.active) {
+                let distance = Math.abs(ball.y - strikeZoneY);
+                
+                if (distance <= strikeZoneHeight) {
+                    // 타격 성공!
+                    ball.active = false;
+                    ballHitAnimation.x = ball.x;
+                    ballHitAnimation.y = ball.y;
+                    ballHitAnimation.active = true;
+                    ballHitAnimation.timer = 40;
+                    
+                    // 홈런 및 안타 판정
+                    if (distance <= 10) {
+                        feedbackText = "🔥 HOMERUN!!! 🔥";
+                        homeruns++;
+                        homerunsSpan.innerText = homeruns;
+                        ballHitAnimation.dx = (Math.random() - 0.5) * 2;
+                        ballHitAnimation.dy = -12; // 하늘 높이 날아감
+                    } else {
+                        feedbackText = "⚾ HIT! ⚾";
+                        ballHitAnimation.dx = (Math.random() > 0.5 ? 5 : -5);
+                        ballHitAnimation.dy = -4; // 안타성 타구
                     }
+                    feedbackAlpha = 1;
+
+                    // 스테이지 클리어 검사
+                    if (homeruns >= targetHomeruns) {
+                        stage++;
+                        setTimeout(() => {
+                            initStage();
+                            msgDiv.innerHTML = `🎉 STAGE CLEAR! 🎉<br>STAGE ${stage}가 시작됩니다. 스페이스바를 누르세요!`;
+                            msgDiv.style.display = "block";
+                        }, 1000);
+                    } else {
+                        setTimeout(() => { msgDiv.innerText = "다음 공 준비... (스페이스바)"; msgDiv.style.display = "block"; }, 1200);
+                    }
+
+                } else {
+                    // 헛스윙 아웃
+                    triggerOut("STRIKE / OUT!");
                 }
+            } else {
+                // 공도 없는데 휘둘렀을 때
+                feedbackText = "TOO EARLY!";
+                feedbackAlpha = 1;
             }
-            if (!hitFound) {
-                // 허공을 쳤을 때 미세 효과 피드백
+        }
+
+        function triggerOut(reason) {
+            ball.active = false;
+            outs++;
+            outsSpan.innerText = outs;
+            feedbackText = reason;
+            feedbackAlpha = 1;
+
+            if (outs >= 3) {
+                gameOver = true;
+                msgDiv.innerHTML = "💥 3 OUT! GAME OVER 💥<br>새로고침(F5)을 눌러 다시 시작하세요.";
+                msgDiv.style.display = "block";
+            } else {
+                setTimeout(() => { msgDiv.innerText = "다음 공 준비... (스페이스바)"; msgDiv.style.display = "block"; }, 1200);
             }
-            comboSpan.innerText = combo;
-            livesSpan.innerText = lives;
         }
 
         function changeStage(direction) {
             if (direction === 'next') stage++;
             else if (direction === 'prev' && stage > 1) stage--;
-            
-            gameActive = false;
             initStage();
-            msgDiv.innerHTML = `⚙️ 스테이지 임의 이동: STAGE ${stage}<br>다시 시작하려면 스페이스바를 누르세요!`;
+            msgDiv.innerHTML = `⚙️ 관리자 권한 이동: STAGE ${stage}<br>스페이스바를 눌러 투구하세요!`;
             msgDiv.style.display = "block";
         }
 
         initStage();
 
-        // 키보드 핸들러
+        // 키 감지
         document.addEventListener("keydown", (e) => {
             let keyLower = e.key.toLowerCase();
             
@@ -206,145 +258,127 @@ rhythm_game_html = """
                 if (e.key === "[") { changeStage('prev'); return; }
             }
 
-            // 시작 토글
-            if ((e.key === " " || keyLower in keys) && !gameActive && lives > 0) {
-                gameActive = true;
-                msgDiv.style.display = "none";
-            }
-
-            if (keyLower in keys) {
-                let lane = keys[keyLower];
-                keyStatus[lane] = true;
-                if (gameActive) checkHit(lane);
+            if (e.key === " ") {
+                e.preventDefault();
+                if (!ball.active && !ballHitAnimation.active) {
+                    throwBall();
+                } else {
+                    swingBat();
+                }
             }
         });
 
-        document.addEventListener("keyup", (e) => {
-            let keyLower = e.key.toLowerCase();
-            if (keyLower in keys) {
-                keyStatus[keys[keyLower]] = false;
-            }
-        });
-
-        // 모바일/마우스용 터치 판정 처리
+        // 모바일/마우스 터치 대응
         canvas.addEventListener("mousedown", (e) => {
-            if (!gameActive && lives > 0) {
-                gameActive = true;
-                msgDiv.style.display = "none";
-                return;
-            }
-            let clientX = e.clientX - canvas.getBoundingClientRect().left;
-            let lane = Math.floor(clientX / lineWidth);
-            if (lane >= 0 && lane < lineCount && gameActive) {
-                keyStatus[lane] = true;
-                checkHit(lane);
-                setTimeout(() => { keyStatus[lane] = false; }, 80);
+            e.preventDefault();
+            if (!ball.active && !ballHitAnimation.active) {
+                throwBall();
+            } else {
+                swingBat();
             }
         });
-
-        let frameCounter = 0;
 
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. 레인 가이드 라인 그리기
-            for (let i = 0; i < lineCount; i++) {
-                ctx.strokeStyle = "rgba(169, 50, 255, 0.15)";
-                ctx.beginPath();
-                ctx.moveTo(i * lineWidth, 0);
-                ctx.lineTo(i * lineWidth, canvas.height);
-                ctx.stroke();
-
-                // 키 누르고 있을 때 레인 배경 하이라이트 효과
-                if (keyStatus[i]) {
-                    ctx.fillStyle = "rgba(169, 50, 255, 0.2)";
-                    ctx.fillRect(i * lineWidth, 0, lineWidth, canvas.height);
-                }
-            }
-
-            // 2. 판정선 가이드바 시각화
-            ctx.strokeStyle = "#4a90e2";
-            ctx.lineWidth = 4;
+            // 1. 야구장 야외 필드 배경 시각화
+            ctx.fillStyle = "#27ae60"; // 내야 잔디 색상
             ctx.beginPath();
-            ctx.moveTo(0, judgmentY);
-            ctx.lineTo(canvas.width, judgmentY);
-            ctx.stroke();
-            ctx.lineWidth = 1;
+            ctx.moveTo(200, 130);
+            ctx.lineTo(400, 350);
+            ctx.lineTo(200, 580);
+            ctx.lineTo(0, 350);
+            ctx.fill();
 
-            // 판정 자리에 있는 버튼 텍스트 표시
-            const btnLabels = ['D', 'F', 'J', 'K'];
-            ctx.font = "bold 16px sans-serif";
-            for (let i = 0; i < lineCount; i++) {
-                ctx.fillStyle = keyStatus[i] ? "#00ffcc" : "#666";
-                ctx.fillText(btnLabels[i], i * lineWidth + lineWidth / 2 - 6, judgmentY + 30);
-            }
+            // 투수 마운드 & 홈플레이트 베이스
+            ctx.fillStyle = "#dbaf7d"; // 흙 색상
+            ctx.beginPath(); ctx.arc(200, pitcherY, 20, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(200, batterY, 25, 0, Math.PI * 2); ctx.fill();
 
-            if (gameActive) {
-                frameCounter++;
-                // 특정 프레임 간격마다 무작위 노트 떨구기
-                let spawnInterval = Math.max(25 - stage * 2, 12);
-                if (frameCounter % Math.floor(spawnInterval) === 0) {
-                    spawnNote();
+            // 2. 타격 타이밍 구역 (노란색 띠)
+            ctx.fillStyle = "rgba(241, 196, 15, 0.3)";
+            ctx.fillRect(0, strikeZoneY - strikeZoneHeight, canvas.width, strikeZoneHeight * 2);
+            ctx.strokeStyle = "#f1c40f";
+            ctx.strokeRect(0, strikeZoneY - strikeZoneHeight, canvas.width, strikeZoneHeight * 2);
+
+            // 3. 투수 및 타자 그래픽 텍스트화
+            ctx.font = "24px sans-serif";
+            ctx.fillText("🧎", 188, pitcherY + 8); // 투수
+            ctx.fillText("🧍", 160, batterY + 8); // 타자
+
+            // 4. 배트 휘두르기 애니메이션 처리
+            if (isSwinging) {
+                batAngle += 0.25;
+                if (batAngle > Math.PI / 2) {
+                    isSwinging = false;
                 }
-
-                // 3. 노트 이동 및 충돌 체크
-                for (let i = 0; i < notes.length; i++) {
-                    let n = notes[i];
-                    n.y += noteSpeed;
-
-                    // 노트 드로잉
-                    ctx.beginPath();
-                    ctx.rect(n.lane * lineWidth + 4, n.y, lineWidth - 8, noteHeight);
-                    ctx.fillStyle = n.type === 'gold' ? "#ffd700" : "#0095DD";
-                    ctx.fill();
-                    ctx.closePath();
-
-                    // 판정선을 완전히 지나쳐 화면 아래로 새버렸을 때 (MISS 처리)
-                    if (n.y > canvas.height) {
-                        combo = 0;
-                        lives = Math.max(0, lives - 1);
-                        comboSpan.innerText = combo;
-                        livesSpan.innerText = lives;
-                        
-                        judgmentTexts.push({ text: "MISS", alpha: 1, y: judgmentY - 40, color: "#ff3333" });
-                        notes.splice(i, 1);
-                        i--;
-                    }
-                }
-
-                // 라이프 아웃 패배 조건 판단
-                if (lives <= 0) {
-                    gameActive = false;
-                    msgDiv.innerHTML = "💥 GAME OVER 💥<br>새로고침(F5)으로 부활하세요.";
-                    msgDiv.style.display = "block";
-                }
-
-                // 곡 끝까지 다 떨어뜨렸고 남은 노트가 없으면 클리어!
-                if (totalNotesCreated >= totalNotesLimit && notes.length === 0) {
-                    stage++;
-                    gameActive = false;
-                    initStage();
-                    msgDiv.innerHTML = `🎉 STAGE CLEAR! 🎉<br>다음 난이도 STAGE ${stage} (클릭하여 시작)`;
-                    msgDiv.style.display = "block";
-                }
-            }
-
-            // 4. 판정 텍스트 피드백 애니메이션 효과
-            ctx.font = "bold 24px sans-serif";
-            for (let i = 0; i < judgmentTexts.length; i++) {
-                let jt = judgmentTexts[i];
                 ctx.save();
-                ctx.globalAlpha = jt.alpha;
-                ctx.fillStyle = jt.color;
-                ctx.fillText(jt.text, canvas.width / 2 - ctx.measureText(jt.text).width / 2, jt.y);
+                ctx.translate(175, batterY);
+                ctx.rotate(batAngle);
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = "#d35400"; // 나무 배트 색상
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(40, 0); ctx.stroke();
                 ctx.restore();
-                
-                jt.y -= 0.5;
-                jt.alpha -= 0.03;
-                if (jt.alpha <= 0) {
-                    judgmentTexts.splice(i, 1);
-                    i--;
+            } else {
+                // 대기 상태 배트
+                ctx.save();
+                ctx.translate(175, batterY);
+                ctx.rotate(-Math.PI / 4);
+                ctx.lineWidth = 6;
+                ctx.strokeStyle = "#d35400";
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(40, 0); ctx.stroke();
+                ctx.restore();
+            }
+
+            // 5. 날아오는 공 로직
+            if (ball.active) {
+                // 체인지업 구종일 때 타이밍 감속 기믹
+                if (ball.type === 'changeup' && ball.y > 300 && ball.y < 380) {
+                    ball.y += ball.dy * 0.4;
+                } else {
+                    ball.y += ball.dy;
                 }
+                ball.x += ball.dx;
+                ball.radius += 0.08; // 다가올수록 공이 커지는 원근감 이펙트
+
+                ctx.beginPath();
+                ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+                ctx.fillStyle = "#ffffff";
+                ctx.fill();
+                ctx.strokeStyle = "#ff0000"; // 야구공 실밥 느낌 선
+                ctx.stroke();
+                ctx.closePath();
+
+                // 배트로 치지 않고 포수 뒤로 완전히 빠졌을 때 (패스트볼/스트라이크)
+                if (ball.y > canvas.height - 40) {
+                    triggerOut("MISSED / STRIKE!");
+                }
+            }
+
+            // 6. 타격 성공 후 날아가는 타구 이펙트
+            if (ballHitAnimation.active) {
+                ballHitAnimation.x += ballHitAnimation.dx;
+                ballHitAnimation.y += ballHitAnimation.dy;
+                ballHitAnimation.timer--;
+
+                ctx.beginPath();
+                ctx.arc(ballHitAnimation.x, ballHitAnimation.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = "#ffff00";
+                ctx.fill();
+                ctx.closePath();
+
+                if (ballHitAnimation.timer <= 0) ballHitAnimation.active = false;
+            }
+
+            // 7. 판정 텍스트 연출
+            if (feedbackAlpha > 0) {
+                ctx.font = "bold 26px sans-serif";
+                ctx.fillStyle = feedbackText.includes("HOMERUN") ? "#e74c3c" : "#3498db";
+                ctx.save();
+                ctx.globalAlpha = feedbackAlpha;
+                ctx.fillText(feedbackText, canvas.width / 2 - ctx.measureText(feedbackText).width / 2, 320);
+                ctx.restore();
+                feedbackAlpha -= 0.02;
             }
 
             requestAnimationFrame(draw);
@@ -356,4 +390,4 @@ rhythm_game_html = """
 </html>
 """
 
-components.html(rhythm_game_html, height=670, scrolling=False)
+components.html(baseball_game_html, height=670, scrolling=False)
