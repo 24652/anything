@@ -156,3 +156,204 @@ rhythm_game_html = """
                     let distance = Math.abs(n.y - judgmentY);
                     if (distance < 45) {
                         hitFound = true;
+                        let rating = "PERFECT";
+                        if (distance <= 15) { rating = "PERFECT"; combo++; }
+                        else if (distance <= 30) { rating = "GOOD"; combo++; }
+                        else { rating = "BAD"; combo = 0; lives = Math.max(0, lives - 1); }
+                        
+                        if (n.type === 'gold' && rating !== "BAD") combo += 2; // 골드노트는 추가 콤보
+                        
+                        judgmentTexts.push({ text: rating, alpha: 1, y: judgmentY - 40, color: rating === "PERFECT" ? "#ff00cc" : "#00ffcc" });
+                        notes.splice(i, 1);
+                        break;
+                    }
+                }
+            }
+            if (!hitFound) {
+                // 허공을 쳤을 때 미세 효과 피드백
+            }
+            comboSpan.innerText = combo;
+            livesSpan.innerText = lives;
+        }
+
+        function changeStage(direction) {
+            if (direction === 'next') stage++;
+            else if (direction === 'prev' && stage > 1) stage--;
+            
+            gameActive = false;
+            initStage();
+            msgDiv.innerHTML = `⚙️ 스테이지 임의 이동: STAGE ${stage}<br>다시 시작하려면 스페이스바를 누르세요!`;
+            msgDiv.style.display = "block";
+        }
+
+        initStage();
+
+        // 키보드 핸들러
+        document.addEventListener("keydown", (e) => {
+            let keyLower = e.key.toLowerCase();
+            
+            // 치트 입력 검사
+            cheatBuffer += keyLower;
+            if (cheatBuffer.endsWith("joonmin")) {
+                isAdmin = !isAdmin;
+                adminUi.style.display = isAdmin ? "block" : "none";
+                cheatBuffer = "";
+            }
+            if (cheatBuffer.length > 20) cheatBuffer = cheatBuffer.substring(10);
+
+            if (isAdmin) {
+                if (e.key === "]") { changeStage('next'); return; }
+                if (e.key === "[") { changeStage('prev'); return; }
+            }
+
+            // 시작 토글
+            if ((e.key === " " || keyLower in keys) && !gameActive && lives > 0) {
+                gameActive = true;
+                msgDiv.style.display = "none";
+            }
+
+            if (keyLower in keys) {
+                let lane = keys[keyLower];
+                keyStatus[lane] = true;
+                if (gameActive) checkHit(lane);
+            }
+        });
+
+        document.addEventListener("keyup", (e) => {
+            let keyLower = e.key.toLowerCase();
+            if (keyLower in keys) {
+                keyStatus[keys[keyLower]] = false;
+            }
+        });
+
+        // 모바일/마우스용 터치 판정 처리
+        canvas.addEventListener("mousedown", (e) => {
+            if (!gameActive && lives > 0) {
+                gameActive = true;
+                msgDiv.style.display = "none";
+                return;
+            }
+            let clientX = e.clientX - canvas.getBoundingClientRect().left;
+            let lane = Math.floor(clientX / lineWidth);
+            if (lane >= 0 && lane < lineCount && gameActive) {
+                keyStatus[lane] = true;
+                checkHit(lane);
+                setTimeout(() => { keyStatus[lane] = false; }, 80);
+            }
+        });
+
+        let frameCounter = 0;
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 1. 레인 가이드 라인 그리기
+            for (let i = 0; i < lineCount; i++) {
+                ctx.strokeStyle = "rgba(169, 50, 255, 0.15)";
+                ctx.beginPath();
+                ctx.moveTo(i * lineWidth, 0);
+                ctx.lineTo(i * lineWidth, canvas.height);
+                ctx.stroke();
+
+                // 키 누르고 있을 때 레인 배경 하이라이트 효과
+                if (keyStatus[i]) {
+                    ctx.fillStyle = "rgba(169, 50, 255, 0.2)";
+                    ctx.fillRect(i * lineWidth, 0, lineWidth, canvas.height);
+                }
+            }
+
+            // 2. 판정선 가이드바 시각화
+            ctx.strokeStyle = "#4a90e2";
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.moveTo(0, judgmentY);
+            ctx.lineTo(canvas.width, judgmentY);
+            ctx.stroke();
+            ctx.lineWidth = 1;
+
+            // 판정 자리에 있는 버튼 텍스트 표시
+            const btnLabels = ['D', 'F', 'J', 'K'];
+            ctx.font = "bold 16px sans-serif";
+            for (let i = 0; i < lineCount; i++) {
+                ctx.fillStyle = keyStatus[i] ? "#00ffcc" : "#666";
+                ctx.fillText(btnLabels[i], i * lineWidth + lineWidth / 2 - 6, judgmentY + 30);
+            }
+
+            if (gameActive) {
+                frameCounter++;
+                // 특정 프레임 간격마다 무작위 노트 떨구기
+                let spawnInterval = Math.max(25 - stage * 2, 12);
+                if (frameCounter % Math.floor(spawnInterval) === 0) {
+                    spawnNote();
+                }
+
+                // 3. 노트 이동 및 충돌 체크
+                for (let i = 0; i < notes.length; i++) {
+                    let n = notes[i];
+                    n.y += noteSpeed;
+
+                    // 노트 드로잉
+                    ctx.beginPath();
+                    ctx.rect(n.lane * lineWidth + 4, n.y, lineWidth - 8, noteHeight);
+                    ctx.fillStyle = n.type === 'gold' ? "#ffd700" : "#0095DD";
+                    ctx.fill();
+                    ctx.closePath();
+
+                    // 판정선을 완전히 지나쳐 화면 아래로 새버렸을 때 (MISS 처리)
+                    if (n.y > canvas.height) {
+                        combo = 0;
+                        lives = Math.max(0, lives - 1);
+                        comboSpan.innerText = combo;
+                        livesSpan.innerText = lives;
+                        
+                        judgmentTexts.push({ text: "MISS", alpha: 1, y: judgmentY - 40, color: "#ff3333" });
+                        notes.splice(i, 1);
+                        i--;
+                    }
+                }
+
+                // 라이프 아웃 패배 조건 판단
+                if (lives <= 0) {
+                    gameActive = false;
+                    msgDiv.innerHTML = "💥 GAME OVER 💥<br>새로고침(F5)으로 부활하세요.";
+                    msgDiv.style.display = "block";
+                }
+
+                // 곡 끝까지 다 떨어뜨렸고 남은 노트가 없으면 클리어!
+                if (totalNotesCreated >= totalNotesLimit && notes.length === 0) {
+                    stage++;
+                    gameActive = false;
+                    initStage();
+                    msgDiv.innerHTML = `🎉 STAGE CLEAR! 🎉<br>다음 난이도 STAGE ${stage} (클릭하여 시작)`;
+                    msgDiv.style.display = "block";
+                }
+            }
+
+            // 4. 판정 텍스트 피드백 애니메이션 효과
+            ctx.font = "bold 24px sans-serif";
+            for (let i = 0; i < judgmentTexts.length; i++) {
+                let jt = judgmentTexts[i];
+                ctx.save();
+                ctx.globalAlpha = jt.alpha;
+                ctx.fillStyle = jt.color;
+                ctx.fillText(jt.text, canvas.width / 2 - ctx.measureText(jt.text).width / 2, jt.y);
+                ctx.restore();
+                
+                jt.y -= 0.5;
+                jt.alpha -= 0.03;
+                if (jt.alpha <= 0) {
+                    judgmentTexts.splice(i, 1);
+                    i--;
+                }
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+    </script>
+</body>
+</html>
+"""
+
+components.html(rhythm_game_html, height=670, scrolling=False)
