@@ -1,123 +1,123 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="KBO Pitcher Simulator", layout="wide")
-st.title("⚾ KBO 모바일 프로야구 (리얼 투수 매니저 에디션)")
+st.set_page_config(page_title="KBO Real Pitcher Manager", layout="wide")
 
-pitcher_sim_html = """
+integrated_pro_baseball_html = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>KBO Pitcher Simulator</title>
+    <title>KBO Real Pitcher Manager</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap');
         body {
-            margin: 0; padding: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
-            background-color: #0b0f19; color: #fff; font-family: 'Noto Sans KR', sans-serif; height: 100vh; overflow: hidden; user-select: none;
+            margin: 0; padding: 0; display: flex; justify-content: center; align-items: center;
+            background-color: #05070a; color: #fff; font-family: 'Noto Sans KR', sans-serif;
+            height: 100vh; overflow: hidden; user-select: none;
         }
         #gameWrapper {
-            position: relative; width: 800px; height: 460px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.8); border-radius: 16px; overflow: hidden; border: 2px solid #334155;
+            position: relative; width: 850px; height: 480px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.9); border-radius: 20px;
+            overflow: hidden; border: 3px solid #1e293b;
         }
-        #gameCanvas { display: block; }
-        
-        /* UI 전광판 */
+        canvas { display: block; background: #000; }
+
+        /* 팀 선택 화면 */
+        #teamSelectOverlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100;
+        }
+        .team-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-top: 20px; }
+        .team-card {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            padding: 15px; border-radius: 12px; cursor: pointer; text-align: center;
+            transition: 0.2s; font-weight: 700; font-size: 14px;
+        }
+        .team-card:hover { background: #3b82f6; transform: translateY(-5px); }
+
+        /* 게임 UI */
         #topScoreBoard {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
-            width: 90%; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;
-            display: flex; justify-content: space-between; align-items: center;
-            padding: 8px 20px; box-sizing: border-box; z-index: 10;
+            width: 90%; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px);
+            border-radius: 15px; border: 1px solid rgba(255,255,255,0.1);
+            display: flex; justify-content: space-between; padding: 10px 25px; z-index: 10;
         }
-        .board-col { display: flex; flex-direction: column; align-items: center; }
-        .inning-text { font-size: 16px; font-weight: 900; color: #fbbf24; }
-        .score-text { font-size: 26px; font-weight: 900; letter-spacing: 2px; }
-        .bso-board { display: flex; gap: 15px; font-weight: 700; font-size: 14px; }
-        .bso-row { display: flex; align-items: center; gap: 4px; }
-        .bso-circle { width: 12px; height: 12px; border-radius: 50%; background: #334155; }
-        .b-active { background: #34d399; box-shadow: 0 0 6px #34d399; }
-        .s-active { background: #fbbf24; box-shadow: 0 0 6px #fbbf24; }
-        .o-active { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
-        
-        #msgOverlay {
-            position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
-            text-align: center; font-size: 24px; font-weight: 900; color: #fff;
-            text-shadow: 0px 4px 12px rgba(0,0,0,0.9); pointer-events: none; z-index: 15; width: 100%;
+        .bso-row { display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+        .circle { width: 12px; height: 12px; border-radius: 50%; background: #334155; }
+        .b-on { background: #34d399; box-shadow: 0 0 8px #34d399; }
+        .s-on { background: #fbbf24; box-shadow: 0 0 8px #fbbf24; }
+        .o-on { background: #ef4444; box-shadow: 0 0 8px #ef4444; }
+
+        /* 컨트롤 패널 */
+        #bottomControl {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: rgba(15, 23, 42, 0.95); display: flex; justify-content: space-around;
+            align-items: center; padding: 15px 0; z-index: 20; border-top: 2px solid #334155;
         }
-        
-        /* 투수 컨트롤 패널 */
-        #controlPanel {
-            position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
-            width: 92%; background: rgba(15, 23, 42, 0.9); padding: 10px; border-radius: 12px;
-            display: flex; gap: 15px; justify-content: space-between; align-items: center; z-index: 10;
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-        .panel-section { display: flex; flex-direction: column; gap: 4px; color: #94a3b8; font-size: 12px; font-weight: bold; }
-        .modern-btn {
-            background: linear-gradient(to bottom, #3b82f6, #1d4ed8); color: white;
-            border: 1px solid #60a5fa; padding: 10px 16px; border-radius: 6px; font-weight: 900; font-size: 14px;
-            cursor: pointer; font-family: 'Noto Sans KR';
-        }
-        .modern-btn:active { transform: scale(0.96); }
-        .select-input {
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        select, input[type=range] {
             background: #1e293b; color: white; border: 1px solid #475569;
-            padding: 8px; border-radius: 6px; font-weight: bold; font-family: 'Noto Sans KR';
+            padding: 8px; border-radius: 6px; font-weight: bold;
         }
-        .range-slider { width: 110px; accent-color: #3b82f6; }
+        .pitch-btn {
+            background: linear-gradient(to bottom, #ef4444, #b91c1c);
+            padding: 15px 40px; border-radius: 10px; border: none; color: white;
+            font-size: 18px; font-weight: 900; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        }
+        .pitch-btn:active { transform: scale(0.95); }
+
+        #msgOverlay {
+            position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%);
+            font-size: 32px; font-weight: 900; text-shadow: 0 4px 10px #000; z-index: 15; text-align: center;
+        }
     </style>
 </head>
 <body>
     <div id="gameWrapper">
+        <div id="teamSelectOverlay">
+            <h1 style="margin-bottom:10px;">KBO LEAGUE PITCHER MANAGER</h1>
+            <p style="color:#94a3b8">플레이할 구단을 선택하세요</p>
+            <div class="team-grid" id="teamGrid"></div>
+        </div>
+
         <div id="topScoreBoard">
-            <div class="board-col" style="width: 25%; align-items: flex-start;">
-                <div id="uiPitcherName" style="font-size:12px; color:#60a5fa; font-weight:900;">투수: 류현진</div>
-                <div class="score-text" id="scAway" style="color:#cbd5e1">0</div>
+            <div style="text-align:left;">
+                <div id="uiMyTeam" style="font-size:12px; color:#60a5fa;">한화 이글스</div>
+                <div id="uiPitcher" style="font-size:18px; font-weight:900;">류현진</div>
             </div>
-            <div class="board-col" style="width: 50%;">
-                <div class="inning-text" id="uiInning">1회초 수비</div>
-                <div class="bso-board">
-                    <div class="bso-row"><span style="color:#34d399;">B</span>
-                        <div class="bso-circle" id="b1"></div><div class="bso-circle" id="b2"></div><div class="bso-circle" id="b3"></div>
-                    </div>
-                    <div class="bso-row"><span style="color:#fbbf24;">S</span>
-                        <div class="bso-circle" id="s1"></div><div class="bso-circle" id="s2"></div>
-                    </div>
-                    <div class="bso-row"><span style="color:#ef4444;">O</span>
-                        <div class="bso-circle" id="o1"></div><div class="bso-circle" id="o2"></div>
-                    </div>
+            <div style="text-align:center;">
+                <div id="uiInning" style="font-size:16px; font-weight:900; color:#fbbf24;">1회말 수비</div>
+                <div style="display:flex; gap:20px; margin-top:5px;">
+                    <div class="bso-row">B <div class="circle" id="b1"></div><div class="circle" id="b2"></div><div class="circle" id="b3"></div></div>
+                    <div class="bso-row">S <div class="circle" id="s1"></div><div class="circle" id="s2"></div></div>
+                    <div class="bso-row">O <div class="circle" id="o1"></div><div class="circle" id="o2"></div></div>
                 </div>
             </div>
-            <div class="board-col" style="width: 25%; align-items: flex-end;">
-                <div id="uiBatterName" style="font-size:12px; color:#f87171; font-weight:900;">타자: 이정후</div>
-                <div class="score-text" id="scHome" style="color:#60a5fa">0</div>
+            <div style="text-align:right;">
+                <div id="uiAwayTeam" style="font-size:12px; color:#f87171;">상대 팀</div>
+                <div id="uiBatter" style="font-size:18px; font-weight:900;">타자</div>
             </div>
         </div>
 
         <div id="msgOverlay">방향키로 조준하고 투구하세요!</div>
-        <canvas id="gameCanvas" width="800" height="460"></canvas>
-        
-        <div id="controlPanel">
-            <div class="panel-section">
-                <span>선수 선택</span>
-                <select class="select-input" id="pitcherSelect" onchange="changePitcher()">
-                    <option value="류현진">한화 류현진 (직구/체인지업)</option>
-                    <option value="김광현">SSG 김광현 (직구/슬라이더)</option>
-                    <option value="양현종">KIA 양현종 (직구/슬라이더)</option>
-                </select>
+        <canvas id="gameCanvas" width="850" height="480"></canvas>
+
+        <div id="bottomControl">
+            <div class="control-group">
+                <label style="font-size:11px; color:#94a3b8;">투수 교체</label>
+                <select id="pitcherSelect" onchange="syncPitcher()"></select>
             </div>
-            <div class="panel-section">
-                <span>구종 선택</span>
-                <select class="select-input" id="ballTypeSelect">
-                    </select>
+            <div class="control-group">
+                <label style="font-size:11px; color:#94a3b8;">구종 선택</label>
+                <select id="ballSelect"></select>
             </div>
-            <div class="panel-section">
-                <span>구속 조절 (<span id="speedVal">145</span>km/h)</span>
-                <input type="range" min="120" max="158" value="145" class="range-slider" id="speedSlider" oninput="document.getElementById('speedVal').innerText=this.value">
+            <div class="control-group">
+                <label style="font-size:11px; color:#94a3b8;">구속 설정 (<span id="speedVal">145</span>km)</label>
+                <input type="range" id="speedSlider" min="120" max="160" value="145" oninput="document.getElementById('speedVal').innerText=this.value">
             </div>
-            <div class="panel-section" style="color:#60a5fa; font-size:11px; justify-content:center;">
-                🕹️ 위치 조절: 키보드 방향키<br>🕹️ 투구 동작: 스페이스바
-            </div>
-            <button class="modern-btn" style="background:linear-gradient(to bottom, #ef4444, #b91c1c); border-color:#f87171;" onclick="startPitching()">⚾ 플레이 볼!</button>
+            <button class="pitch-btn" onclick="throwBall()">PLAY BALL</button>
         </div>
     </div>
 
@@ -125,286 +125,178 @@ pitcher_sim_html = """
         const canvas = document.getElementById("gameCanvas");
         const ctx = canvas.getContext("2d");
         const msgDiv = document.getElementById("msgOverlay");
-        const pSelect = document.getElementById("pitcherSelect");
-        const tSelect = document.getElementById("ballTypeSelect");
-        const sSlider = document.getElementById("speedSlider");
 
-        const pitcherDB = {
-            "류현진": { type: ["포심 직구", "서클 체인지업"], maxSpd: 148 },
-            "김광현": { type: ["포심 직구", "고속 슬라이더"], maxSpd: 152 },
-            "양현종": { type: ["포심 직구", "슬라이더"], maxSpd: 150 }
+        // --- KBO 데이터베이스 ---
+        const kboDB = {
+            "한화 이글스": { pitchers: [{n:"류현진", b:["포심", "체인지업", "커브"], s:148}, {n:"문동주", b:["포심", "슬라이더", "커브"], s:160}] },
+            "SSG 랜더스": { pitchers: [{n:"김광현", b:["포심", "슬라이더", "체인지업"], s:152}, {n:"문승원", b:["포심", "슬라이더"], s:150}] },
+            "KIA 타이거즈": { pitchers: [{n:"양현종", b:["포심", "슬라이더", "체인지업"], s:150}, {n:"정해영", b:["포심", "슬라이더"], s:153}] },
+            "LG 트윈스": { pitchers: [{n:"임찬규", b:["포심", "체인지업", "커브"], s:147}, {n:"유영찬", b:["포심", "슬라이더"], s:154}] },
+            "삼성 라이온즈": { pitchers: [{n:"원태인", b:["포심", "체인지업", "슬라이더"], s:150}, {n:"오승환", b:["포심", "슬라이더"], s:149}] },
+            "두산 베어스": { pitchers: [{n:"곽빈", b:["포심", "슬라이더", "커브"], s:155}, {n:"김택연", b:["포심", "슬라이더"], s:156}] },
+            "KT 위즈": { pitchers: [{n:"고영표", b:["체인지업", "싱커", "커브"], s:145}, {n:"박영현", b:["포심", "슬라이더"], s:153}] },
+            "롯데 자이언츠": { pitchers: [{n:"반즈", b:["포심", "슬라이더", "체인지업"], s:150}, {n:"김원중", b:["포심", "포크"], s:152}] },
+            "NC 다이노스": { pitchers: [{n:"신민혁", b:["포심", "체인지업", "컷패스트볼"], s:147}, {n:"이용찬", b:["포심", "포크"], s:149}] },
+            "키움 히어로즈": { pitchers: [{n:"후라도", b:["포심", "커터", "싱커", "체인지업"], s:152}, {n:"조상우", b:["포심", "슬라이더"], s:156}] }
         };
 
-        const batterPool = ["구자욱", "김도영", "홍창기", "최정", "양의지", "노시환"];
+        let myTeam = "", currentPitcher = null;
+        let aimX = 425, aimY = 320;
+        let state = "READY";
+        let ball = { z: 100, active: false };
+        let B=0, S=0, O=0, inning=1;
+        let isSwinging = false;
 
-        let state = "PLAYING"; 
-        let inning = 1; let isTop = false; // 플레이어가 투수(수비) 고정
-        let scAway = 0; let scHome = 0;
-        let B = 0, S = 0, O = 0;
-        let bases = [false, false, false];
-        let floatingTexts = [];
-        let screenShake = 0;
+        // --- 초기화 및 팀 선택 ---
+        const teamGrid = document.getElementById("teamGrid");
+        Object.keys(kboDB).forEach(team => {
+            const card = document.createElement("div");
+            card.className = "team-card";
+            card.innerText = team;
+            card.onclick = () => selectTeam(team);
+            teamGrid.appendChild(card);
+        });
 
-        // 조준점 좌표 및 투구 데이터
-        let aimX = 400, aimY = 315;
-        let ball = { z: 100, x: 400, y: 170, active: false, speedZ: 2 };
-        let isSwinging = false; let swingAngle = 0;
-        let curBatter = batterPool[0];
-
-        const zone = { x: 350, y: 260, w: 100, h: 110 };
-
-        function changePitcher() {
-            let p = pSelect.value;
-            document.getElementById("uiPitcherName").innerText = `투수: ${p}`;
-            tSelect.innerHTML = "";
-            pitcherDB[p].type.forEach(t => {
-                let opt = document.createElement("option");
-                opt.value = t; opt.innerText = t;
-                tSelect.appendChild(opt);
+        function selectTeam(team) {
+            myTeam = team;
+            document.getElementById("teamSelectOverlay").style.display = "none";
+            document.getElementById("uiMyTeam").innerText = team;
+            
+            const pSelect = document.getElementById("pitcherSelect");
+            pSelect.innerHTML = "";
+            kboDB[team].pitchers.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p.n; opt.innerText = p.n;
+                pSelect.appendChild(opt);
             });
-            sSlider.max = pitcherDB[p].maxSpd;
-            sSlider.value = pitcherDB[p].maxSpd - 5;
-            document.getElementById('speedVal').innerText = sSlider.value;
+            syncPitcher();
+            nextBatter();
+        }
+
+        function syncPitcher() {
+            const pName = document.getElementById("pitcherSelect").value;
+            currentPitcher = kboDB[myTeam].pitchers.find(p => p.n === pName);
+            document.getElementById("uiPitcher").innerText = pName;
+            
+            const bSelect = document.getElementById("ballSelect");
+            bSelect.innerHTML = "";
+            currentPitcher.b.forEach(b => {
+                const opt = document.createElement("option");
+                opt.value = b; opt.innerText = b;
+                bSelect.appendChild(opt);
+            });
+            document.getElementById("speedSlider").max = currentPitcher.s;
+            document.getElementById("speedSlider").value = currentPitcher.s - 5;
         }
 
         function nextBatter() {
-            curBatter = batterPool[Math.floor(Math.random() * batterPool.length)];
-            document.getElementById("uiBatterName").innerText = `타자: ${curBatter}`;
+            const batters = ["구자욱", "김도영", "홍창기", "최정", "양의지", "노시환", "오스틴", "페라자"];
+            document.getElementById("uiBatter").innerText = batters[Math.floor(Math.random()*batters.length)];
         }
 
-        function startPitching() {
-            if (state !== "PLAYING") return;
-            state = "PITCHING";
-            msgDiv.style.display = "none";
-            
-            ball.z = 100; ball.active = true;
-            // 구속 기반 Z축 속도 매핑
-            ball.speedZ = parseFloat(sSlider.value) / 70;
-        }
-
-        // 방향키 조준점 이동 및 스페이스바 투구 제어
+        // --- 조작 및 게임 로직 ---
         document.addEventListener("keydown", (e) => {
-            if (state === "PLAYING") {
-                if (e.key === "ArrowLeft") aimX = Math.max(280, aimX - 8);
-                if (e.key === "ArrowRight") aimX = Math.min(520, aimX + 8);
-                if (e.key === "ArrowUp") aimY = Math.max(190, aimY - 8);
-                if (e.key === "ArrowDown") aimY = Math.min(410, aimY + 8);
-                if (e.key === " ") { e.preventDefault(); startPitching(); }
-            }
+            if(state !== "READY") return;
+            if(e.key === "ArrowLeft") aimX -= 10;
+            if(e.key === "ArrowRight") aimX += 10;
+            if(e.key === "ArrowUp") aimY -= 10;
+            if(e.key === "ArrowDown") aimY += 10;
+            aimX = Math.max(300, Math.min(550, aimX));
+            aimY = Math.max(200, Math.min(420, aimY));
+            if(e.key === " ") throwBall();
         });
 
-        function updateUI() {
-            document.getElementById("uiInning").innerText = `${inning}회말 수비`;
-            document.getElementById("scAway").innerText = scAway; 
-            document.getElementById("scHome").innerText = scHome;
-            
-            for(let i=1; i<=3; i++) document.getElementById("b"+i).className = `bso-circle ${B>=i ? 'b-active':''}`;
-            for(let i=1; i<=2; i++) document.getElementById("s"+i).className = `bso-circle ${S>=i ? 's-active':''}`;
-            for(let i=1; i<=2; i++) document.getElementById("o"+i).className = `bso-circle ${O>=i ? 'o-active':''}`;
+        function throwBall() {
+            if(state !== "READY") return;
+            state = "PITCHING";
+            msgDiv.style.display = "none";
+            ball = { z:100, active:true, x:425, y:200, targetX:aimX, targetY:aimY, speed: document.getElementById("speedSlider").value / 60 };
         }
 
-        // AI 타자 타격 메커니즘
-        function evaluateAIHit() {
+        function evaluateResult() {
             ball.active = false;
-            let isStrike = (aimX >= zone.x && aimX <= zone.x + zone.w && aimY >= zone.y && aimY <= zone.y + zone.h);
+            const inZone = (ball.targetX > 375 && ball.targetX < 475 && ball.targetY > 260 && ball.targetY < 380);
             
-            // 스트라이크존 구석에 찔러넣었는지 여부 (피칭 퀄리티)
-            let distFromCenter = Math.hypot(aimX - 400, aimY - 315);
-            let edgePitch = isStrike && (distFromCenter > 45); 
-
-            // AI 배트 스윙 결정 확률 계산
-            let swingProb = isStrike ? 0.75 : 0.25;
-            if (tSelect.value !== "포심 직구" && !isStrike) swingProb = 0.15; // 유인구 효과
-
-            if (Math.random() < swingProb) {
-                // 스윙 시도
-                isSwinging = true; swingAngle = -60;
-                
-                // 타격 성공 및 범타/안타 판정 (구속이 빠르거나 보더라인 공이면 실책 유도)
-                let contactProb = 0.6;
-                if (edgePitch) contactProb -= 0.25;
-                if (parseFloat(sSlider.value) > 150) contactProb -= 0.15;
-
-                if (Math.random() < contactProb) {
-                    // 안타 혹은 홈런 판정
-                    if (Math.random() > 0.85 && isStrike && !edgePitch) {
-                        addFloat("💥 홈런 피안타!", "#ef4444"); screenShake = 20; advanceRun(4);
+            // AI 타자 로직
+            const swingProb = inZone ? 0.7 : 0.2;
+            if(Math.random() < swingProb) {
+                isSwinging = true;
+                if(Math.random() < 0.6) { // 헛스윙
+                    addS(); addFloat("헛스윙 스트라이크!", "#fbbf24");
+                } else { // 안타 혹은 범타
+                    if(Math.random() > 0.8) {
+                        addFloat("💥 안타 허용!", "#f87171"); B=0; S=0;
                     } else {
-                        addFloat("⚾ 안타 허용!", "#f87171"); screenShake = 10; advanceRun(1);
+                        addO(); addFloat("⚾ 범타 처리!", "#34d399"); B=0; S=0;
                     }
-                    B = 0; S = 0; nextBatter();
-                } else {
-                    addFloat("헛스윙 스트라이크!", "#34d399"); S++;
                 }
             } else {
-                // 지켜봄 (루킹)
-                if (isStrike) { addFloat("루킹 스트라이크!", "#60a5fa"); S++; } 
-                else { addFloat("볼!", "#fbbf24"); B++; }
-            }
-
-            // 아웃카운트 및 볼넷 규칙 처리
-            if (S >= 3) { addFloat("삼진 아웃!!", "#34d399"); O++; B = 0; S = 0; nextBatter(); }
-            if (B >= 4) { addFloat("볼넷 허용", "#f59e0b"); advanceRun(1, true); B = 0; S = 0; nextBatter(); }
-            
-            if (O >= 3) {
-                inning++; O = 0; B = 0; S = 0; bases = [false, false, false];
-                addFloat("이닝 종료! 공수 교대", "#fbbf24");
+                if(inZone) { addS(); addFloat("루킹 스트라이크!", "#fbbf24"); }
+                else { addB(); addFloat("볼!", "#34d399"); }
             }
             
             setTimeout(() => {
-                state = "PLAYING"; isSwinging = false;
-                msgDiv.style.display = "block"; updateUI();
+                state = "READY"; isSwinging = false;
+                msgDiv.style.display = "block"; updateBSO();
             }, 1500);
         }
 
-        function advanceRun(amt, isWalk=false) {
-            let runs = 0;
-            if(isWalk) {
-                if(bases[0] && bases[1] && bases[2]) runs = 1;
-                else if(bases[0] && bases[1]) bases[2] = true;
-                else if(bases[0]) bases[1] = true;
-                bases[0] = true;
-            } else {
-                for(let i=0; i<amt; i++) {
-                    if(bases[2]) runs++; bases[2] = bases[1]; bases[1] = bases[0]; bases[0] = (i === 0);
-                }
-            }
-            scAway += runs; // 상대팀 득점 처리
+        function addS() { S++; if(S>=3){ S=0; B=0; addO(); addFloat("삼진!!", "#60a5fa"); } }
+        function addB() { B++; if(B>=4){ S=0; B=0; addFloat("볼넷 허용", "#94a3b8"); } }
+        function addO() { O++; if(O>=3){ O=0; inning++; addFloat("이닝 교대!", "#fbbf24"); } }
+        
+        function updateBSO() {
+            for(let i=1; i<=3; i++) document.getElementById("b"+i).className = `circle ${B>=i?'b-on':''}`;
+            for(let i=1; i<=2; i++) document.getElementById("s"+i).className = `circle ${S>=i?'s-on':''}`;
+            for(let i=1; i<=2; i++) document.getElementById("o"+i).className = `circle ${O>=i?'o-on':''}`;
+            document.getElementById("uiInning").innerText = inning + "회말 수비";
         }
 
-        // --- 캔버스 그래픽 드로잉 함수 ---
-        function drawScene() {
-            // 구장 그라데이션 배경
-            let sky = ctx.createLinearGradient(0,0,0,150);
-            sky.addColorStop(0, "#090d16"); sky.addColorStop(1, "#1e1b4b");
-            ctx.fillStyle = sky; ctx.fillRect(0,0,800,150);
-
-            let ground = ctx.createLinearGradient(0,150,0,460);
-            ground.addColorStop(0, "#115e59"); ground.addColorStop(1, "#065f46");
-            ctx.fillStyle = ground; ctx.fillRect(0,150,800,310);
-
-            // 흙 및 라인 렌더링
-            ctx.fillStyle = "#7c2d12"; ctx.beginPath();
-            ctx.moveTo(400, 150); ctx.lineTo(670, 280); ctx.lineTo(400, 440); ctx.lineTo(130, 280); ctx.fill();
-
-            ctx.fillStyle = "#0f766e"; ctx.beginPath();
-            ctx.moveTo(400, 200); ctx.lineTo(550, 280); ctx.lineTo(400, 360); ctx.lineTo(250, 280); ctx.fill();
-
-            // 주자 상황 미니맵 미러링
-            ctx.fillStyle = "#0f172a"; ctx.fillRect(25, 355, 75, 75);
-            const drawBase = (bx, by, active) => {
-                ctx.fillStyle = active ? "#ef4444" : "#475569";
-                ctx.save(); ctx.translate(bx, by); ctx.rotate(Math.PI/4); ctx.fillRect(-6, -6, 12, 12); ctx.restore();
-            };
-            drawBase(75, 392, bases[0]); drawBase(62, 370, bases[1]); drawBase(49, 392, bases[2]);
+        function addFloat(txt, color) {
+            msgDiv.innerText = txt; msgDiv.style.color = color; msgDiv.style.display = "block";
         }
 
-        function drawFielders() {
-            ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
-            const f = (x, y, s) => {
-                ctx.beginPath(); ctx.ellipse(x, y+12*s, 8*s, 3*s, 0, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = "#cbd5e1"; ctx.fillRect(x-3*s, y, 6*s, 12*s);
-                ctx.beginPath(); ctx.arc(x, y-2*s, 3*s, 0, Math.PI*2); ctx.fill();
-            };
-            f(200, 130, 0.5); f(400, 115, 0.45); f(600, 130, 0.5); // 외야
-            f(310, 180, 0.65); f(490, 180, 0.65); f(560, 230, 0.75); f(240, 230, 0.75); // 내야
-        }
-
-        function drawInteractiveZone() {
-            // 스트라이크존 박스
-            ctx.strokeStyle = "rgba(251, 191, 36, 0.85)"; ctx.lineWidth = 3;
-            ctx.strokeRect(zone.x, zone.y, zone.w, zone.h);
+        // --- 렌더링 루프 ---
+        function draw() {
+            ctx.clearRect(0,0,850,480);
             
-            ctx.strokeStyle = "rgba(251, 191, 36, 0.2)"; ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(zone.x + zone.w/3, zone.y); ctx.lineTo(zone.x + zone.w/3, zone.y + zone.h);
-            ctx.moveTo(zone.x + zone.w*2/3, zone.y); ctx.lineTo(zone.x + zone.w*2/3, zone.y + zone.h);
-            ctx.moveTo(zone.x, zone.y + zone.h/3); ctx.lineTo(zone.x + zone.w, zone.y + zone.h/3);
-            ctx.moveTo(zone.x, zone.y + zone.h*2/3); ctx.lineTo(zone.x + zone.w, zone.y + zone.h*2/3);
-            ctx.stroke();
+            // 야구장 배경
+            ctx.fillStyle = "#0f172a"; ctx.fillRect(0,0,850,200); // 하늘
+            ctx.fillStyle = "#166534"; ctx.fillRect(0,200,850,280); // 잔디
+            
+            // 흙 및 마운드
+            ctx.fillStyle = "#92400e"; ctx.beginPath(); ctx.moveTo(425, 180); ctx.lineTo(750, 480); ctx.lineTo(100, 480); ctx.fill();
+            ctx.fillStyle = "#fff"; ctx.fillRect(375, 430, 100, 10); // 홈플레이트
+            
+            // 스트라이크 존 가이드
+            ctx.strokeStyle = "rgba(255,255,255,0.2)"; ctx.lineWidth = 2;
+            ctx.strokeRect(375, 260, 100, 120);
 
-            // 실시간 투구 조준 마커 (플레이 모드일 때만 표시)
-            if (state === "PLAYING") {
-                ctx.strokeStyle = "#22d3ee"; ctx.lineWidth = 2;
-                ctx.beginPath(); ctx.arc(aimX, aimY, 8, 0, Math.PI*2); ctx.stroke();
-                ctx.fillStyle = "rgba(34, 211, 238, 0.3)"; ctx.fill();
-            }
-        }
-
-        function drawBatterAndPitcher() {
-            // 투수 모션 위치
-            ctx.fillStyle = "#e2e8f0"; ctx.fillRect(396, 240, 8, 25);
-            ctx.beginPath(); ctx.arc(400, 235, 5, 0, Math.PI*2); ctx.fill();
-
-            // AI 타자 실루엣
-            ctx.fillStyle = "#94a3b8"; ctx.fillRect(275, 290, 25, 95);
-            ctx.beginPath(); ctx.arc(287, 275, 12, 0, Math.PI*2); ctx.fill();
-
-            ctx.save(); ctx.translate(300, 310);
-            if (isSwinging) {
-                swingAngle += 24; ctx.rotate(swingAngle * Math.PI / 180);
-                ctx.fillStyle = "#92400e"; ctx.fillRect(0, -6, 75, 12);
-            } else {
-                ctx.rotate(-45 * Math.PI / 180); ctx.fillStyle = "#92400e"; ctx.fillRect(0, -5, 65, 10);
-            }
-            ctx.restore();
-        }
-
-        function gameLoop() {
-            ctx.save();
-            if (screenShake > 0) {
-                ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
-                screenShake--;
+            // 조준 마커
+            if(state === "READY") {
+                ctx.strokeStyle = "#3b82f6"; ctx.beginPath(); ctx.arc(aimX, aimY, 10, 0, Math.PI*2); ctx.stroke();
             }
 
-            ctx.clearRect(0,0,800,460);
-            drawScene();
-            drawFielders();
-            drawInteractiveZone();
-            drawBatterAndPitcher();
+            // 투수 & 타자 실루엣
+            ctx.fillStyle = "#cbd5e1"; ctx.fillRect(415, 180, 20, 50); // 투수
+            ctx.fillStyle = "#94a3b8"; ctx.fillRect(320, 350, 30, 100); // 타자
 
-            // 물리 투구 엔진
-            if (ball.active) {
-                ball.z -= ball.speedZ;
+            // 공 투구 애니메이션
+            if(ball.active) {
+                ball.z -= ball.speed;
                 let scale = 1 - (ball.z / 100);
-                
-                // 구종 타입에 따른 X축 휨 현상 추가 (변화구 연출)
-                let typeStr = tSelect.value;
-                let curveX = (typeStr !== "포심 직구") ? Math.sin(scale * Math.PI) * 40 : 0;
-
-                let curX = 400 + (aimX - 400) * scale + curveX;
-                let curY = 240 + (aimY - 240) * scale;
-                let curRad = 3 + (12 * scale);
-
-                ctx.beginPath(); ctx.arc(curX, curY, curRad, 0, Math.PI*2);
-                ctx.fillStyle = "#fff"; ctx.fill();
-                ctx.strokeStyle = "#475569"; ctx.stroke();
-
-                if (ball.z <= 0) evaluateAIHit();
+                let curX = 425 + (ball.targetX - 425) * scale;
+                let curY = 200 + (ball.targetY - 200) * scale;
+                ctx.fillStyle = "white"; ctx.beginPath(); ctx.arc(curX, curY, 3 + scale*10, 0, Math.PI*2); ctx.fill();
+                if(ball.z <= 0) evaluateResult();
             }
 
-            // 결과 메시지 루프
-            for(let i=floatingTexts.length-1; i>=0; i--) {
-                let ft = floatingTexts[i];
-                ctx.font = "italic 900 36px 'Noto Sans KR'"; ctx.textAlign = "center";
-                ctx.fillStyle = ft.c; ctx.globalAlpha = ft.a;
-                ctx.lineWidth = 5; ctx.strokeStyle = "#000"; ctx.strokeText(ft.t, 400, ft.y);
-                ctx.fillText(ft.t, 400, ft.y);
-                ft.y -= 1.5; ft.a -= 0.02; ctx.globalAlpha = 1.0;
-                if (ft.a <= 0) floatingTexts.splice(i, 1);
-            }
-
-            ctx.restore();
-            requestAnimationFrame(gameLoop);
+            requestAnimationFrame(draw);
         }
-
-        changePitcher();
-        nextBatter();
-        gameLoop();
-        updateUI();
+        draw();
     </script>
 </body>
 </html>
 """
 
-components.html(pitcher_sim_html, height=490, width=830, scrolling=False)
+components.html(integrated_pro_baseball_html, height=520, width=900, scrolling=False)
