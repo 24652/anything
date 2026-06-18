@@ -1,15 +1,14 @@
 import streamlit as st
 import streamlit.components.v1 as components
 
-st.set_page_config(page_title="KBO Ultimate Rule Edition", layout="wide")
+st.set_page_config(page_title="KBO 프로야구 매니저 에디션", layout="wide")
 
-# UI 깨짐 방지 및 정상 출력을 위해 크기 규격을 재조정하고 CSS 레이아웃을 보강했습니다.
 ultimate_baseball_html = """
 <!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>KBO Ultimate Rule Edition</title>
+    <title>KBO 프로야구 매니저 에디션</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@500;700;900&display=swap');
         body {
@@ -18,29 +17,28 @@ ultimate_baseball_html = """
             height: 100vh; overflow: hidden; user-select: none;
         }
         #gameWrapper {
-            position: relative; width: 900px; height: 550px; /* 안정적인 높이 확보 */
+            position: relative; width: 900px; height: 550px;
             box-shadow: 0 20px 60px rgba(0,0,0,0.95); border-radius: 16px;
             overflow: hidden; border: 2px solid #334155; background: #020617;
         }
         canvas { display: block; cursor: crosshair; background: #000; }
 
-        /* 로비 화면 최적화 (검은 화면 방지) */
+        /* 로비 화면 10개 팀 격자 배치 최적화 */
         #lobbyOverlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
             display: flex; flex-direction: column; justify-content: center; align-items: center;
-            z-index: 100; opacity: 1; transition: opacity 0.3s ease;
+            z-index: 100;
         }
-        .lobby-title { font-size: 34px; font-weight: 900; background: linear-gradient(to right, #f43f5e, #eab308); -webkit-background-clip: text; color: transparent; margin-bottom: 5px; }
-        .team-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 25px; width: 85%; }
+        .lobby-title { font-size: 34px; font-weight: 900; background: linear-gradient(to right, #3b82f6, #34d399); -webkit-background-clip: text; color: transparent; margin-bottom: 5px; }
+        .team-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 25px; width: 90%; }
         .team-card {
-            background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
-            padding: 18px 10px; border-radius: 10px; cursor: pointer; text-align: center;
-            transition: all 0.2s ease; font-weight: 900; font-size: 16px; color: #e2e8f0;
+            background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.15);
+            padding: 16px 8px; border-radius: 10px; cursor: pointer; text-align: center;
+            transition: all 0.2s ease; font-weight: 900; font-size: 15px; color: #e2e8f0;
         }
-        .team-card:hover { background: rgba(255,255,255,0.2); transform: translateY(-3px); box-shadow: 0 10px 20px rgba(255,255,255,0.2); }
+        .team-card:hover { background: rgba(255,255,255,0.2); transform: translateY(-3px); box-shadow: 0 8px 16px rgba(255,255,255,0.15); }
 
-        /* 인게임 스코어보드 고정 */
         #topScoreBoard {
             position: absolute; top: 15px; left: 50%; transform: translateX(-50%);
             width: 92%; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(8px);
@@ -83,23 +81,13 @@ ultimate_baseball_html = """
             font-size: 32px; font-weight: 900; text-shadow: 0 4px 12px #000; 
             z-index: 15; text-align: center; width: 100%; pointer-events: none;
         }
-        
-        #adminLockBtn {
-            position: absolute; bottom: 95px; left: 15px; background: #1e293b; border: 1px solid #475569;
-            color: #94a3b8; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; z-index: 30;
-        }
-        #adminPanel {
-            position: absolute; bottom: 95px; left: 15px; background: rgba(15, 23, 42, 0.95);
-            padding: 12px; border-radius: 8px; border: 1px solid #ef4444; font-size: 11px; z-index: 30;
-            line-height: 1.5; color: #cbd5e1; display: none;
-        }
     </style>
 </head>
 <body>
     <div id="gameWrapper">
         <div id="lobbyOverlay">
-            <div class="lobby-title">KBO ULTIMATE RULE EDITION</div>
-            <p style="color:#94a3b8; font-weight:bold;">구단을 선택하면 대진표가 구성되며 게임이 시작됩니다.</p>
+            <div class="lobby-title">KBO 프로야구 매니저 에디션</div>
+            <p style="color:#94a3b8; font-weight:bold;">플레이할 구단을 선택하세요 (KBO 전체 10개 구단 활성화)</p>
             <div class="team-grid" id="teamGrid"></div>
         </div>
 
@@ -125,14 +113,6 @@ ultimate_baseball_html = """
         <div id="turnIndicator">MY TURN: 투구하기</div>
         <div id="msgOverlay">구단을 선택해주세요!</div>
         
-        <button id="adminLockBtn" onclick="unlockAdmin()">🔒 어드민 모드 인증</button>
-        <div id="adminPanel">
-            <b style="color:#ef4444; font-size:12px;">⚡ 어드민 활성화 (Shift + Key)</b><br>
-            • <span style="color:#fbbf24">S</span>: 스트라이크 &nbsp;&nbsp; • <span style="color:#34d399">B</span>: 볼 추가<br>
-            • <span style="color:#60a5fa">H</span>: 1루타 단타 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; • <span style="color:#a855f7">2</span> / <span style="color:#ec4899">3</span>: 2루타 / 3루타<br>
-            • <span style="color:#f43f5e">R</span>: 즉시 홈런 폭발
-        </div>
-
         <canvas id="gameCanvas" width="900" height="550"></canvas>
 
         <div id="bottomControl">
@@ -163,19 +143,24 @@ ultimate_baseball_html = """
         const ctx = canvas.getContext("2d");
         const msgDiv = document.getElementById("msgOverlay");
 
+        // KBO 전체 10개 구단 데이터베이스 구축 완료
         const kboDB = {
-            "한화": { color: "#f97316", players: [{n:"류현진", b:["포심", "체인지업", "커브", "슬라이더"], s:149}, {n:"문동주", b:["포심", "슬라이더", "스플리터", "싱커"], s:161}]},
-            "KIA": { color: "#ea580c", players: [{n:"양현종", b:["포심", "체인지업", "슬라이더", "커브"], s:148}, {n:"정해영", b:["포심", "슬라이더"], s:154}]},
-            "삼성": { color: "#1d4ed8", players: [{n:"원태인", b:["포심", "체인지업", "커브", "컷패스트볼"], s:151}]},
-            "LG": { color: "#a21caf", players: [{n:"임찬규", b:["체인지업", "포심", "커브", "슬라이더"], s:146}]},
-            "두산": { color: "#1e293b", players: [{n:"곽빈", b:["포심", "커브", "슬라이더", "체인지업"], s:156}]}
+            "한화": { color: "#f97316", players: [{n:"류현진", b:["포심", "체인지업", "커브", "슬라이더"], s:149}, {n:"문동주", b:["포심", "슬라이더", "스플리터"], s:161}]},
+            "KIA": { color: "#ef4444", players: [{n:"양현종", b:["포심", "체인지업", "슬라이더"], s:147}]},
+            "삼성": { color: "#2563eb", players: [{n:"원태인", b:["포심", "체인지업", "커브", "컷패스트볼"], s:151}]},
+            "LG": { color: "#be185d", players: [{n:"임찬규", b:["체인지업", "포심", "커브"], s:146}]},
+            "두산": { color: "#1e293b", players: [{n:"곽빈", b:["포심", "커브", "슬라이더"], s:155}]},
+            "키움": { color: "#881337", players: [{n:"후라도", b:["포심", "싱커", "커터"], s:152}]},
+            "SSG": { color: "#dc2626", players: [{n:"김광현", b:["슬라이더", "포심", "체인지업"], s:149}]},
+            "NC": { color: "#0369a1", players: [{n:"신민혁", b:["체인지업", "포심", "커터"], s:145}]},
+            "롯데": { color: "#0284c7", players: [{n:"박세웅", b:["포심", "슬라이더", "커브"], s:151}]},
+            "KT": { color: "#334155", players: [{n:"고영표", b:["체인지업", "싱커", "커브"], s:142}]}
         };
 
         let myTeam = "", oppTeam = "";
         let currentPitcher = null;
         let isPlayerBatting = false; 
         let state = "LOBBY"; 
-        let adminAuthorized = false; 
         
         let aimX = 450, aimY = 340;
         let stamina = 100; 
@@ -187,7 +172,6 @@ ultimate_baseball_html = """
         let isSwinging = false; let swingTimer = 0;
         let floatingTexts = []; let screenShake = 0;
 
-        // 스트라이크 존 규격 (걸치기 판정을 위해 마진 계산 포함)
         const zone = { left: 395, right: 505, top: 275, bottom: 405 };
 
         const fielders = [
@@ -195,28 +179,15 @@ ultimate_baseball_html = """
             {x: 270, y: 250, s: 0.68}, {x: 360, y: 205, s: 0.58}, {x: 540, y: 205, s: 0.58}, {x: 630, y: 250, s: 0.68}
         ];
 
-        function unlockAdmin() {
-            let pw = prompt("어드민 해제 비밀번호를 입력하세요:");
-            if(pw === "JOONMIN") {
-                adminAuthorized = true;
-                document.getElementById("adminLockBtn").style.display = "none";
-                document.getElementById("adminPanel").style.display = "block";
-                addFloat("🔒 어드민 모드 오픈!", "#ef4444");
-            } else { alert("비밀번호가 틀렸습니다!"); }
-        }
-
-        // 마우스 조준 시스템
         canvas.addEventListener("mousedown", (e) => {
             if (state === "READY" && !isPlayerBatting) {
                 const rect = canvas.getBoundingClientRect();
                 aimX = e.clientX - rect.left; aimY = e.clientY - rect.top;
-                // 투구 가능 범위 제한
                 aimX = Math.max(300, Math.min(600, aimX));
                 aimY = Math.max(180, Math.min(480, aimY));
             }
         });
 
-        // 대기 화면 로드 함수
         const teamGrid = document.getElementById("teamGrid");
         Object.keys(kboDB).forEach(team => {
             const card = document.createElement("div");
@@ -227,8 +198,7 @@ ultimate_baseball_html = """
 
         function selectTeam(team) {
             myTeam = team; state = "READY";
-            document.getElementById("lobbyOverlay").style.style.display = "none";
-            document.getElementById("lobbyOverlay").remove(); // 레이어 제거로 검은 화면 완전 해결
+            document.getElementById("lobbyOverlay").style.display = "none"; // 오타 수정 완료
             document.getElementById("uiHomeTeam").innerText = `${team} (나)`;
             
             let opps = Object.keys(kboDB).filter(t => t !== team);
@@ -258,16 +228,6 @@ ultimate_baseball_html = """
         }
 
         document.addEventListener("keydown", (e) => {
-            if(e.shiftKey && adminAuthorized) {
-                e.preventDefault();
-                if(e.key.toLowerCase() === "s") { S++; addFloat("ADMIN: 스트라이크", "#fbbf24"); checkOutsUI(); }
-                if(e.key.toLowerCase() === "b") { B++; addFloat("ADMIN: 볼 선언", "#34d399"); checkOutsUI(); }
-                if(e.key.toLowerCase() === "h") { processHitData(1, "안타!"); }
-                if(e.key === "2") { processHitData(2, "2루타!!"); }
-                if(e.key === "3") { processHitData(3, "3루타!!!"); }
-                if(e.key.toLowerCase() === "r") { processHitData(4, "🎁 대형 홈런 🚀"); }
-                updateUI(); return;
-            }
             if(e.key === " ") { e.preventDefault(); actionBtnClick(); }
         });
 
@@ -300,7 +260,6 @@ ultimate_baseball_html = """
             
             stamina = Math.max(0, stamina - 5);
             
-            // ⭐ [확률 기반 제구 오차 물리엔진 구현] 체력이 부족하면 조준이 빗나감
             let finalX = aimX; let finalY = aimY;
             let wildPitchChance = (100 - stamina) / 100; 
             
@@ -317,7 +276,7 @@ ultimate_baseball_html = """
             if(state !== "READY" || !isPlayerBatting) return;
             state = "ACTION"; msgDiv.style.display = "none";
             let tx = 360 + Math.random()*180; let ty = 240 + Math.random()*180;
-            let rTypes = ["포심","슬라이더","커브","포크"];
+            let rTypes = ["포심","슬라이더","커브"];
             ball = { z:100, active:true, targetX:tx, targetY:ty, speed: 2.2 + Math.random()*0.5, type: rTypes[Math.floor(Math.random()*rTypes.length)], trail:[] };
         }
 
@@ -331,13 +290,11 @@ ultimate_baseball_html = """
 
         function evaluateResult() {
             ball.active = false;
-            let bRad = 12; // 걸치기 판정을 위한 여유 마진
+            let bRad = 12;
 
-            // ⭐ [야구 규칙 추가 1]: 스트라이크 존 경계선에 조금이라도 걸치면 스트라이크 판정
             const isStrike = (ball.targetX + bRad >= zone.left && ball.targetX - bRad <= zone.right &&
                               ball.targetY + bRad >= zone.top && ball.targetY - bRad <= zone.bottom);
                               
-            // ⭐ [야구 규칙 추가 2]: 타자 몸쪽(좌측 핫존) 깊숙하게 들어오면 몸에 맞는 공(데드볼) 판정
             const isHitByPitch = (ball.targetX > 310 && ball.targetX < 365 && ball.targetY > 320 && ball.targetY < 440);
 
             if (isHitByPitch) {
@@ -399,7 +356,6 @@ ultimate_baseball_html = """
             if(S >= 3) { S = 0; B = 0; O++; addFloat("삼진 아웃!", "#ef4444"); }
             if(O >= 3) {
                 O = 0; B = 0; S = 0; runners = [false, false, false];
-                // 9회말 공격 종료 시 정규 이닝 세트 스코어 계산 후 강제 종료
                 if (inning >= 9 && isPlayerBatting) { endGame(); return; }
                 isPlayerBatting = !isPlayerBatting;
                 if(!isPlayerBatting) inning++;
@@ -508,7 +464,6 @@ ultimate_baseball_html = """
                 let dx = 0; let dy = 0;
                 if(ball.type === "슬라이더") dx = Math.sin(scale * Math.PI) * 55;
                 if(ball.type === "커브") { dx = Math.sin(scale * Math.PI) * 35; dy = Math.sin(scale * Math.PI) * 45; }
-                if(ball.type === "포크") dy = Math.pow(scale, 2) * 55;
 
                 let curX = 450 + (ball.targetX - 450) * scale + dx;
                 let curY = 220 + (ball.targetY - 220) * scale + dy;
