@@ -23,7 +23,6 @@ ultimate_baseball_html = """
         }
         canvas { display: block; cursor: crosshair; background: #000; }
 
-        /* 로비 화면 10개 팀 격자 배치 최적화 */
         #lobbyOverlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             background: radial-gradient(circle at center, #1e293b 0%, #020617 100%);
@@ -143,7 +142,6 @@ ultimate_baseball_html = """
         const ctx = canvas.getContext("2d");
         const msgDiv = document.getElementById("msgOverlay");
 
-        // KBO 전체 10개 구단 데이터베이스 구축 완료
         const kboDB = {
             "한화": { color: "#f97316", players: [{n:"류현진", b:["포심", "체인지업", "커브", "슬라이더"], s:149}, {n:"문동주", b:["포심", "슬라이더", "스플리터"], s:161}]},
             "KIA": { color: "#ef4444", players: [{n:"양현종", b:["포심", "체인지업", "슬라이더"], s:147}]},
@@ -198,7 +196,7 @@ ultimate_baseball_html = """
 
         function selectTeam(team) {
             myTeam = team; state = "READY";
-            document.getElementById("lobbyOverlay").style.display = "none"; // 오타 수정 완료
+            document.getElementById("lobbyOverlay").style.display = "none";
             document.getElementById("uiHomeTeam").innerText = `${team} (나)`;
             
             let opps = Object.keys(kboDB).filter(t => t !== team);
@@ -254,6 +252,7 @@ ultimate_baseball_html = """
         }
 
         function throwBall() {
+            if(state !== "READY") return; // 락 장치 추가
             state = "ACTION"; msgDiv.style.display = "none";
             let spd = document.getElementById("speedSlider").value / 58;
             let type = document.getElementById("ballSelect").value;
@@ -269,7 +268,7 @@ ultimate_baseball_html = """
                 finalY += (Math.random() - 0.5) * errorRange;
             }
             
-            ball = { z:100, active:true, targetX:finalX, targetY:finalY, speed: spd, type: type, trail:[] };
+            ball = { z:100, active:true, x:450, y:220, targetX:finalX, targetY:finalY, speed: spd, type: type, trail:[] };
         }
 
         function aiThrowBall() {
@@ -277,14 +276,14 @@ ultimate_baseball_html = """
             state = "ACTION"; msgDiv.style.display = "none";
             let tx = 360 + Math.random()*180; let ty = 240 + Math.random()*180;
             let rTypes = ["포심","슬라이더","커브"];
-            ball = { z:100, active:true, targetX:tx, targetY:ty, speed: 2.2 + Math.random()*0.5, type: rTypes[Math.floor(Math.random()*rTypes.length)], trail:[] };
+            ball = { z:100, active:true, x:450, y:220, targetX:tx, targetY:ty, speed: 2.2 + Math.random()*0.5, type: rTypes[Math.floor(Math.random()*rTypes.length)], trail:[] };
         }
 
         function swingBat() {
             isSwinging = true; swingTimer = 15;
-            if(ball.z > 4 && ball.z < 24) {
+            if(ball.z > 4 && ball.z < 26) {
                 let hitDist = Math.hypot(ball.targetX - 450, ball.targetY - 340);
-                if(hitDist < 75) { triggerHitTrajectory(); return; }
+                if(hitDist < 80) { triggerHitTrajectory(); return; }
             }
         }
 
@@ -307,13 +306,15 @@ ultimate_baseball_html = """
                 const aiSwingProb = isStrike ? 0.75 : 0.18;
                 if(Math.random() < aiSwingProb) {
                     isSwinging = true; swingTimer = 15;
-                    if(Math.random() < 0.42) { triggerHitTrajectory(); } else { addStrike("헛스윙!"); }
+                    if(Math.random() < 0.42) { triggerHitTrajectory(); } else { addStrike("헛스윙!"); setTimeout(setupTurn, 1200); }
                 } else {
                     if(isStrike) addStrike("루킹 스트라이크!"); else addBall("볼!");
+                    setTimeout(setupTurn, 1200);
                 }
             } else {
                 if(isSwinging) addStrike("헛스윙!");
                 else { if(isStrike) addStrike("스트라이크!", true); else addBall("볼!"); }
+                setTimeout(setupTurn, 1200); // 사용자 타격 실패 시 즉시 READY 전환 콜백 보증
             }
         }
 
