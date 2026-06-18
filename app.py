@@ -80,6 +80,17 @@ ultimate_baseball_html = """
             font-size: 32px; font-weight: 900; text-shadow: 0 4px 12px #000; 
             z-index: 15; text-align: center; width: 100%; pointer-events: none;
         }
+
+        /* 어드민 패널 스타일 */
+        #adminLockBtn {
+            position: absolute; bottom: 95px; left: 15px; background: #1e293b; border: 1px solid #475569;
+            color: #94a3b8; padding: 6px 12px; border-radius: 6px; font-size: 11px; cursor: pointer; z-index: 30;
+        }
+        #adminPanel {
+            position: absolute; bottom: 95px; left: 15px; background: rgba(15, 23, 42, 0.95);
+            padding: 12px; border-radius: 8px; border: 1px solid #ef4444; font-size: 11px; z-index: 30;
+            line-height: 1.5; color: #cbd5e1; display: none;
+        }
     </style>
 </head>
 <body>
@@ -112,6 +123,14 @@ ultimate_baseball_html = """
         <div id="turnIndicator">MY TURN: 투구하기</div>
         <div id="msgOverlay">구단을 선택해주세요!</div>
         
+        <button id="adminLockBtn" onclick="unlockAdmin()">🔒 어드민 모드 인증</button>
+        <div id="adminPanel">
+            <b style="color:#ef4444; font-size:12px;">⚡ 어드민 활성화 (Shift + Key)</b><br>
+            • <span style="color:#fbbf24">S</span>: 스트라이크 &nbsp;&nbsp; • <span style="color:#34d399">B</span>: 볼 추가<br>
+            • <span style="color:#60a5fa">H</span>: 1루타 단타 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; • <span style="color:#a855f7">2</span> / <span style="color:#ec4899">3</span>: 2루타 / 3루타<br>
+            • <span style="color:#f43f5e">R</span>: 즉시 홈런 폭발
+        </div>
+
         <canvas id="gameCanvas" width="900" height="550"></canvas>
 
         <div id="bottomControl">
@@ -159,6 +178,7 @@ ultimate_baseball_html = """
         let currentPitcher = null;
         let isPlayerBatting = false; 
         let state = "LOBBY"; 
+        let adminAuthorized = false;
         
         let aimX = 450, aimY = 340;
         let stamina = 100; 
@@ -176,6 +196,16 @@ ultimate_baseball_html = """
             {x: 200, y: 155, s: 0.45}, {x: 450, y: 135, s: 0.4}, {x: 700, y: 155, s: 0.45},
             {x: 270, y: 250, s: 0.68}, {x: 360, y: 205, s: 0.58}, {x: 540, y: 205, s: 0.58}, {x: 630, y: 250, s: 0.68}
         ];
+
+        function unlockAdmin() {
+            let pw = prompt("어드민 해제 비밀번호를 입력하세요:");
+            if(pw === "JOONMIN") {
+                adminAuthorized = true;
+                document.getElementById("adminLockBtn").style.display = "none";
+                document.getElementById("adminPanel").style.display = "block";
+                addFloat("🔒 어드민 모드 오픈!", "#ef4444");
+            } else { alert("비밀번호가 틀렸습니다!"); }
+        }
 
         canvas.addEventListener("mousedown", (e) => {
             if (state === "READY" && !isPlayerBatting) {
@@ -226,6 +256,18 @@ ultimate_baseball_html = """
         }
 
         document.addEventListener("keydown", (e) => {
+            // 어드민 치트키 감지 및 강제 예외처리 루틴
+            if(e.shiftKey && adminAuthorized) {
+                e.preventDefault();
+                ball.active = false;
+                if(e.key.toLowerCase() === "s") { S++; addFloat("ADMIN: 스트라이크", "#fbbf24"); checkOutsUI(); setTimeout(setupTurn, 600); }
+                if(e.key.toLowerCase() === "b") { B++; addFloat("ADMIN: 볼 선언", "#34d399"); if(B>=4){ S=0; B=0; processHitData(1, "볼넷(Walk) 출루!"); } updateUI(); setTimeout(setupTurn, 600); }
+                if(e.key.toLowerCase() === "h") { processHitData(1, "안타!"); setTimeout(setupTurn, 600); }
+                if(e.key === "2") { processHitData(2, "2루타!!"); setTimeout(setupTurn, 600); }
+                if(e.key === "3") { processHitData(3, "3루타!!!"); setTimeout(setupTurn, 600); }
+                if(e.key.toLowerCase() === "r") { processHitData(4, "🎁 대형 홈런 🚀"); setTimeout(setupTurn, 600); }
+                return;
+            }
             if(e.key === " ") { e.preventDefault(); actionBtnClick(); }
         });
 
@@ -252,7 +294,7 @@ ultimate_baseball_html = """
         }
 
         function throwBall() {
-            if(state !== "READY") return; // 락 장치 추가
+            if(state !== "READY") return;
             state = "ACTION"; msgDiv.style.display = "none";
             let spd = document.getElementById("speedSlider").value / 58;
             let type = document.getElementById("ballSelect").value;
@@ -314,7 +356,7 @@ ultimate_baseball_html = """
             } else {
                 if(isSwinging) addStrike("헛스윙!");
                 else { if(isStrike) addStrike("스트라이크!", true); else addBall("볼!"); }
-                setTimeout(setupTurn, 1200); // 사용자 타격 실패 시 즉시 READY 전환 콜백 보증
+                setTimeout(setupTurn, 1200);
             }
         }
 
